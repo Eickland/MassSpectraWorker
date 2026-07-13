@@ -1,0 +1,58 @@
+// text_service.proto
+syntax = "proto3";
+
+package plot;
+option go_package = "src/protobuf/plot;plot";
+// Сервис с методами
+service TextService {
+  // Обычный RPC (запрос-ответ)
+  rpc ProcessText (TextRequest) returns (TextResponse);
+  
+  // Server Streaming (сервер отправляет несколько сообщений)
+  rpc StreamProcessText (TextRequest) returns (stream TextChunk);
+  
+  // Client Streaming (клиент отправляет несколько сообщений)
+  rpc AnalyzeTextStream (stream TextChunk) returns (TextAnalysis);
+  
+  // Bidirectional Streaming (оба направления)
+  rpc ChatStream (stream ChatMessage) returns (stream ChatMessage);
+}
+
+// Сообщение для запроса
+message TextRequest {
+  string text = 1;
+  string language = 2;
+  bool uppercase = 3;
+  repeated string tags = 4;  // массив строк
+}
+
+// Сообщение для ответа
+message TextResponse {
+  string original_text = 1;
+  string processed_text = 2;
+  int32 length = 3;
+  string language = 4;
+  map<string, string> metadata = 5;  // словарь
+}
+
+// Для стриминга
+message TextChunk {
+  string content = 1;
+  int32 chunk_number = 2;
+  bool is_last = 3;
+}
+
+// Анализ текста
+message TextAnalysis {
+  int32 word_count = 1;
+  int32 char_count = 2;
+  int32 sentence_count = 3;
+  map<string, int32> word_frequency = 4;
+}
+
+// Для чата
+message ChatMessage {
+  string user_id = 1;
+  string message = 2;
+  int64 timestamp = 3;
+}
