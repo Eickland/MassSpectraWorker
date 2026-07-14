@@ -24,31 +24,50 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17src/protobuf/plot.proto\x12\x0btextservice\"N\n\x0bTextRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x10\n\x08language\x18\x02 \x01(\t\x12\x11\n\tuppercase\x18\x03 \x01(\x08\x12\x0c\n\x04tags\x18\x04 \x03(\t\"\xcb\x01\n\x0cTextResponse\x12\x15\n\roriginal_text\x18\x01 \x01(\t\x12\x16\n\x0eprocessed_text\x18\x02 \x01(\t\x12\x0e\n\x06length\x18\x03 \x01(\x05\x12\x10\n\x08language\x18\x04 \x01(\t\x12\x39\n\x08metadata\x18\x05 \x03(\x0b\x32\'.textservice.TextResponse.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"C\n\tTextChunk\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x14\n\x0c\x63hunk_number\x18\x02 \x01(\x05\x12\x0f\n\x07is_last\x18\x03 \x01(\x08\"\xca\x01\n\x0cTextAnalysis\x12\x12\n\nword_count\x18\x01 \x01(\x05\x12\x12\n\nchar_count\x18\x02 \x01(\x05\x12\x16\n\x0esentence_count\x18\x03 \x01(\x05\x12\x44\n\x0eword_frequency\x18\x04 \x03(\x0b\x32,.textservice.TextAnalysis.WordFrequencyEntry\x1a\x34\n\x12WordFrequencyEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x05:\x02\x38\x01\"B\n\x0b\x43hatMessage\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\ttimestamp\x18\x03 \x01(\x03\x32\xaa\x02\n\x0bTextService\x12\x42\n\x0bProcessText\x12\x18.textservice.TextRequest\x1a\x19.textservice.TextResponse\x12G\n\x11StreamProcessText\x12\x18.textservice.TextRequest\x1a\x16.textservice.TextChunk0\x01\x12H\n\x11\x41nalyzeTextStream\x12\x16.textservice.TextChunk\x1a\x19.textservice.TextAnalysis(\x01\x12\x44\n\nChatStream\x12\x18.textservice.ChatMessage\x1a\x18.textservice.ChatMessage(\x01\x30\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17src/protobuf/plot.proto\x12\x04plot\"N\n\x0bTextRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x10\n\x08language\x18\x02 \x01(\t\x12\x11\n\tuppercase\x18\x03 \x01(\x08\x12\x0c\n\x04tags\x18\x04 \x03(\t\"\xc4\x01\n\x0cTextResponse\x12\x15\n\roriginal_text\x18\x01 \x01(\t\x12\x16\n\x0eprocessed_text\x18\x02 \x01(\t\x12\x0e\n\x06length\x18\x03 \x01(\x05\x12\x10\n\x08language\x18\x04 \x01(\t\x12\x32\n\x08metadata\x18\x05 \x03(\x0b\x32 .plot.TextResponse.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xaf\x02\n\x0bPlotRequest\x12\x10\n\x08x_values\x18\x01 \x03(\x01\x12\x10\n\x08y_values\x18\x02 \x03(\x01\x12\r\n\x05title\x18\x03 \x01(\t\x12\x0f\n\x07x_label\x18\x04 \x01(\t\x12\x0f\n\x07y_label\x18\x05 \x01(\t\x12\x11\n\tplot_type\x18\x06 \x01(\t\x12\r\n\x05\x63olor\x18\x07 \x01(\t\x12\x0c\n\x04grid\x18\x08 \x01(\x08\x12\r\n\x05width\x18\t \x01(\x05\x12\x0e\n\x06height\x18\n \x01(\x05\x12\x0b\n\x03\x64pi\x18\x0b \x01(\x05\x12\x0e\n\x06\x66ormat\x18\x0c \x01(\t\x12/\n\x07options\x18\r \x03(\x0b\x32\x1e.plot.PlotRequest.OptionsEntry\x1a.\n\x0cOptionsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x8d\x01\n\x0cPlotResponse\x12\x12\n\nimage_data\x18\x01 \x01(\x0c\x12\x0e\n\x06\x66ormat\x18\x02 \x01(\t\x12\x12\n\nsize_bytes\x18\x03 \x01(\x03\x12\x11\n\tmime_type\x18\x04 \x01(\t\x12\x14\n\x0cgenerated_at\x18\x05 \x01(\x03\x12\x1c\n\x04info\x18\x06 \x01(\x0b\x32\x0e.plot.PlotInfo\"Z\n\tPlotChunk\x12\x12\n\nchunk_data\x18\x01 \x01(\x0c\x12\x14\n\x0c\x63hunk_number\x18\x02 \x01(\x05\x12\x0f\n\x07is_last\x18\x03 \x01(\x08\x12\x12\n\ntotal_size\x18\x04 \x01(\x03\"D\n\x10MultiPlotRequest\x12 \n\x05plots\x18\x01 \x03(\x0b\x32\x11.plot.PlotRequest\x12\x0e\n\x06layout\x18\x02 \x01(\t\"E\n\x08PlotInfo\x12\r\n\x05title\x18\x01 \x01(\t\x12\r\n\x05width\x18\x02 \x01(\x05\x12\x0e\n\x06height\x18\x03 \x01(\x05\x12\x0b\n\x03\x64pi\x18\x04 \x01(\x05\"(\n\x0c\x45lementRange\x12\x0b\n\x03min\x18\x01 \x01(\x05\x12\x0b\n\x03max\x18\x02 \x01(\x05\"\x95\x02\n\x0fMassListRequest\x12\x14\n\x0cspectra_name\x18\x01 \x01(\t\x12\x16\n\x0elow_percentile\x18\x02 \x01(\x02\x12\x17\n\x0fhigh_percentile\x18\x03 \x01(\x02\x12\x11\n\trel_error\x18\x04 \x01(\x02\x12\x12\n\ncharge_max\x18\x05 \x01(\x05\x12:\n\x0b\x62rutto_dict\x18\x06 \x03(\x0b\x32%.plot.MassListRequest.BruttoDictEntry\x12\x11\n\tprotocole\x18\x07 \x01(\t\x1a\x45\n\x0f\x42ruttoDictEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12!\n\x05value\x18\x02 \x01(\x0b\x32\x12.plot.ElementRange:\x02\x38\x01\"\x91\x01\n\x10MassListResponse\x12\x12\n\nimage_data\x18\x01 \x01(\x0c\x12\x0e\n\x06\x66ormat\x18\x02 \x01(\t\x12\x12\n\nsize_bytes\x18\x03 \x01(\x03\x12\x11\n\tmime_type\x18\x04 \x01(\t\x12\x14\n\x0cgenerated_at\x18\x05 \x01(\x03\x12\x1c\n\x04info\x18\x06 \x01(\x0b\x32\x0e.plot.PlotInfo2C\n\x0bTextService\x12\x34\n\x0bProcessText\x12\x11.plot.TextRequest\x1a\x12.plot.TextResponse2\xbf\x01\n\x0bPlotService\x12\x35\n\x0cGeneratePlot\x12\x11.plot.PlotRequest\x1a\x12.plot.PlotResponse\x12\x32\n\nStreamPlot\x12\x11.plot.PlotRequest\x1a\x0f.plot.PlotChunk0\x01\x12\x45\n\x15GenerateMultiplePlots\x12\x16.plot.MultiPlotRequest\x1a\x12.plot.PlotResponse0\x01\x32S\n\x0fMassListService\x12@\n\x0fProcessMassList\x12\x15.plot.MassListRequest\x1a\x16.plot.MassListResponseB\x18Z\x16src/protobuf/plot;plotb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'src.protobuf.plot_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  DESCRIPTOR._loaded_options = None
+  _globals['DESCRIPTOR']._loaded_options = None
+  _globals['DESCRIPTOR']._serialized_options = b'Z\026src/protobuf/plot;plot'
   _globals['_TEXTRESPONSE_METADATAENTRY']._loaded_options = None
   _globals['_TEXTRESPONSE_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_TEXTANALYSIS_WORDFREQUENCYENTRY']._loaded_options = None
-  _globals['_TEXTANALYSIS_WORDFREQUENCYENTRY']._serialized_options = b'8\001'
-  _globals['_TEXTREQUEST']._serialized_start=40
-  _globals['_TEXTREQUEST']._serialized_end=118
-  _globals['_TEXTRESPONSE']._serialized_start=121
-  _globals['_TEXTRESPONSE']._serialized_end=324
-  _globals['_TEXTRESPONSE_METADATAENTRY']._serialized_start=277
-  _globals['_TEXTRESPONSE_METADATAENTRY']._serialized_end=324
-  _globals['_TEXTCHUNK']._serialized_start=326
-  _globals['_TEXTCHUNK']._serialized_end=393
-  _globals['_TEXTANALYSIS']._serialized_start=396
-  _globals['_TEXTANALYSIS']._serialized_end=598
-  _globals['_TEXTANALYSIS_WORDFREQUENCYENTRY']._serialized_start=546
-  _globals['_TEXTANALYSIS_WORDFREQUENCYENTRY']._serialized_end=598
-  _globals['_CHATMESSAGE']._serialized_start=600
-  _globals['_CHATMESSAGE']._serialized_end=666
-  _globals['_TEXTSERVICE']._serialized_start=669
-  _globals['_TEXTSERVICE']._serialized_end=967
+  _globals['_PLOTREQUEST_OPTIONSENTRY']._loaded_options = None
+  _globals['_PLOTREQUEST_OPTIONSENTRY']._serialized_options = b'8\001'
+  _globals['_MASSLISTREQUEST_BRUTTODICTENTRY']._loaded_options = None
+  _globals['_MASSLISTREQUEST_BRUTTODICTENTRY']._serialized_options = b'8\001'
+  _globals['_TEXTREQUEST']._serialized_start=33
+  _globals['_TEXTREQUEST']._serialized_end=111
+  _globals['_TEXTRESPONSE']._serialized_start=114
+  _globals['_TEXTRESPONSE']._serialized_end=310
+  _globals['_TEXTRESPONSE_METADATAENTRY']._serialized_start=263
+  _globals['_TEXTRESPONSE_METADATAENTRY']._serialized_end=310
+  _globals['_PLOTREQUEST']._serialized_start=313
+  _globals['_PLOTREQUEST']._serialized_end=616
+  _globals['_PLOTREQUEST_OPTIONSENTRY']._serialized_start=570
+  _globals['_PLOTREQUEST_OPTIONSENTRY']._serialized_end=616
+  _globals['_PLOTRESPONSE']._serialized_start=619
+  _globals['_PLOTRESPONSE']._serialized_end=760
+  _globals['_PLOTCHUNK']._serialized_start=762
+  _globals['_PLOTCHUNK']._serialized_end=852
+  _globals['_MULTIPLOTREQUEST']._serialized_start=854
+  _globals['_MULTIPLOTREQUEST']._serialized_end=922
+  _globals['_PLOTINFO']._serialized_start=924
+  _globals['_PLOTINFO']._serialized_end=993
+  _globals['_ELEMENTRANGE']._serialized_start=995
+  _globals['_ELEMENTRANGE']._serialized_end=1035
+  _globals['_MASSLISTREQUEST']._serialized_start=1038
+  _globals['_MASSLISTREQUEST']._serialized_end=1315
+  _globals['_MASSLISTREQUEST_BRUTTODICTENTRY']._serialized_start=1246
+  _globals['_MASSLISTREQUEST_BRUTTODICTENTRY']._serialized_end=1315
+  _globals['_MASSLISTRESPONSE']._serialized_start=1318
+  _globals['_MASSLISTRESPONSE']._serialized_end=1463
+  _globals['_TEXTSERVICE']._serialized_start=1465
+  _globals['_TEXTSERVICE']._serialized_end=1532
+  _globals['_PLOTSERVICE']._serialized_start=1535
+  _globals['_PLOTSERVICE']._serialized_end=1726
+  _globals['_MASSLISTSERVICE']._serialized_start=1728
+  _globals['_MASSLISTSERVICE']._serialized_end=1811
 # @@protoc_insertion_point(module_scope)

@@ -36,24 +36,9 @@ class TextServiceStub:
             channel: A grpc.Channel.
         """
         self.ProcessText = channel.unary_unary(
-                '/textservice.TextService/ProcessText',
+                '/plot.TextService/ProcessText',
                 request_serializer=src_dot_protobuf_dot_plot__pb2.TextRequest.SerializeToString,
                 response_deserializer=src_dot_protobuf_dot_plot__pb2.TextResponse.FromString,
-                _registered_method=True)
-        self.StreamProcessText = channel.unary_stream(
-                '/textservice.TextService/StreamProcessText',
-                request_serializer=src_dot_protobuf_dot_plot__pb2.TextRequest.SerializeToString,
-                response_deserializer=src_dot_protobuf_dot_plot__pb2.TextChunk.FromString,
-                _registered_method=True)
-        self.AnalyzeTextStream = channel.stream_unary(
-                '/textservice.TextService/AnalyzeTextStream',
-                request_serializer=src_dot_protobuf_dot_plot__pb2.TextChunk.SerializeToString,
-                response_deserializer=src_dot_protobuf_dot_plot__pb2.TextAnalysis.FromString,
-                _registered_method=True)
-        self.ChatStream = channel.stream_stream(
-                '/textservice.TextService/ChatStream',
-                request_serializer=src_dot_protobuf_dot_plot__pb2.ChatMessage.SerializeToString,
-                response_deserializer=src_dot_protobuf_dot_plot__pb2.ChatMessage.FromString,
                 _registered_method=True)
 
 
@@ -68,27 +53,6 @@ class TextServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def StreamProcessText(self, request, context):
-        """Server Streaming (сервер отправляет несколько сообщений)
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def AnalyzeTextStream(self, request_iterator, context):
-        """Client Streaming (клиент отправляет несколько сообщений)
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ChatStream(self, request_iterator, context):
-        """Bidirectional Streaming (оба направления)
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_TextServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -97,26 +61,11 @@ def add_TextServiceServicer_to_server(servicer, server):
                     request_deserializer=src_dot_protobuf_dot_plot__pb2.TextRequest.FromString,
                     response_serializer=src_dot_protobuf_dot_plot__pb2.TextResponse.SerializeToString,
             ),
-            'StreamProcessText': grpc.unary_stream_rpc_method_handler(
-                    servicer.StreamProcessText,
-                    request_deserializer=src_dot_protobuf_dot_plot__pb2.TextRequest.FromString,
-                    response_serializer=src_dot_protobuf_dot_plot__pb2.TextChunk.SerializeToString,
-            ),
-            'AnalyzeTextStream': grpc.stream_unary_rpc_method_handler(
-                    servicer.AnalyzeTextStream,
-                    request_deserializer=src_dot_protobuf_dot_plot__pb2.TextChunk.FromString,
-                    response_serializer=src_dot_protobuf_dot_plot__pb2.TextAnalysis.SerializeToString,
-            ),
-            'ChatStream': grpc.stream_stream_rpc_method_handler(
-                    servicer.ChatStream,
-                    request_deserializer=src_dot_protobuf_dot_plot__pb2.ChatMessage.FromString,
-                    response_serializer=src_dot_protobuf_dot_plot__pb2.ChatMessage.SerializeToString,
-            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'textservice.TextService', rpc_method_handlers)
+            'plot.TextService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('textservice.TextService', rpc_method_handlers)
+    server.add_registered_method_handlers('plot.TextService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -138,7 +87,7 @@ class TextService:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/textservice.TextService/ProcessText',
+            '/plot.TextService/ProcessText',
             src_dot_protobuf_dot_plot__pb2.TextRequest.SerializeToString,
             src_dot_protobuf_dot_plot__pb2.TextResponse.FromString,
             options,
@@ -151,8 +100,115 @@ class TextService:
             metadata,
             _registered_method=True)
 
+
+class PlotServiceStub:
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.GeneratePlot = channel.unary_unary(
+                '/plot.PlotService/GeneratePlot',
+                request_serializer=src_dot_protobuf_dot_plot__pb2.PlotRequest.SerializeToString,
+                response_deserializer=src_dot_protobuf_dot_plot__pb2.PlotResponse.FromString,
+                _registered_method=True)
+        self.StreamPlot = channel.unary_stream(
+                '/plot.PlotService/StreamPlot',
+                request_serializer=src_dot_protobuf_dot_plot__pb2.PlotRequest.SerializeToString,
+                response_deserializer=src_dot_protobuf_dot_plot__pb2.PlotChunk.FromString,
+                _registered_method=True)
+        self.GenerateMultiplePlots = channel.unary_stream(
+                '/plot.PlotService/GenerateMultiplePlots',
+                request_serializer=src_dot_protobuf_dot_plot__pb2.MultiPlotRequest.SerializeToString,
+                response_deserializer=src_dot_protobuf_dot_plot__pb2.PlotResponse.FromString,
+                _registered_method=True)
+
+
+class PlotServiceServicer:
+    """Missing associated documentation comment in .proto file."""
+
+    def GeneratePlot(self, request, context):
+        """Обычный RPC для получения графика
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StreamPlot(self, request, context):
+        """Стриминг для больших графиков
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GenerateMultiplePlots(self, request, context):
+        """Множество графиков
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_PlotServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'GeneratePlot': grpc.unary_unary_rpc_method_handler(
+                    servicer.GeneratePlot,
+                    request_deserializer=src_dot_protobuf_dot_plot__pb2.PlotRequest.FromString,
+                    response_serializer=src_dot_protobuf_dot_plot__pb2.PlotResponse.SerializeToString,
+            ),
+            'StreamPlot': grpc.unary_stream_rpc_method_handler(
+                    servicer.StreamPlot,
+                    request_deserializer=src_dot_protobuf_dot_plot__pb2.PlotRequest.FromString,
+                    response_serializer=src_dot_protobuf_dot_plot__pb2.PlotChunk.SerializeToString,
+            ),
+            'GenerateMultiplePlots': grpc.unary_stream_rpc_method_handler(
+                    servicer.GenerateMultiplePlots,
+                    request_deserializer=src_dot_protobuf_dot_plot__pb2.MultiPlotRequest.FromString,
+                    response_serializer=src_dot_protobuf_dot_plot__pb2.PlotResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'plot.PlotService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('plot.PlotService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class PlotService:
+    """Missing associated documentation comment in .proto file."""
+
     @staticmethod
-    def StreamProcessText(request,
+    def GeneratePlot(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/plot.PlotService/GeneratePlot',
+            src_dot_protobuf_dot_plot__pb2.PlotRequest.SerializeToString,
+            src_dot_protobuf_dot_plot__pb2.PlotResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StreamPlot(request,
             target,
             options=(),
             channel_credentials=None,
@@ -165,9 +221,9 @@ class TextService:
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/textservice.TextService/StreamProcessText',
-            src_dot_protobuf_dot_plot__pb2.TextRequest.SerializeToString,
-            src_dot_protobuf_dot_plot__pb2.TextChunk.FromString,
+            '/plot.PlotService/StreamPlot',
+            src_dot_protobuf_dot_plot__pb2.PlotRequest.SerializeToString,
+            src_dot_protobuf_dot_plot__pb2.PlotChunk.FromString,
             options,
             channel_credentials,
             insecure,
@@ -179,7 +235,7 @@ class TextService:
             _registered_method=True)
 
     @staticmethod
-    def AnalyzeTextStream(request_iterator,
+    def GenerateMultiplePlots(request,
             target,
             options=(),
             channel_credentials=None,
@@ -189,12 +245,12 @@ class TextService:
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_unary(
-            request_iterator,
+        return grpc.experimental.unary_stream(
+            request,
             target,
-            '/textservice.TextService/AnalyzeTextStream',
-            src_dot_protobuf_dot_plot__pb2.TextChunk.SerializeToString,
-            src_dot_protobuf_dot_plot__pb2.TextAnalysis.FromString,
+            '/plot.PlotService/GenerateMultiplePlots',
+            src_dot_protobuf_dot_plot__pb2.MultiPlotRequest.SerializeToString,
+            src_dot_protobuf_dot_plot__pb2.PlotResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -205,8 +261,53 @@ class TextService:
             metadata,
             _registered_method=True)
 
+
+class MassListServiceStub:
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.ProcessMassList = channel.unary_unary(
+                '/plot.MassListService/ProcessMassList',
+                request_serializer=src_dot_protobuf_dot_plot__pb2.MassListRequest.SerializeToString,
+                response_deserializer=src_dot_protobuf_dot_plot__pb2.MassListResponse.FromString,
+                _registered_method=True)
+
+
+class MassListServiceServicer:
+    """Missing associated documentation comment in .proto file."""
+
+    def ProcessMassList(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_MassListServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'ProcessMassList': grpc.unary_unary_rpc_method_handler(
+                    servicer.ProcessMassList,
+                    request_deserializer=src_dot_protobuf_dot_plot__pb2.MassListRequest.FromString,
+                    response_serializer=src_dot_protobuf_dot_plot__pb2.MassListResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'plot.MassListService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('plot.MassListService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class MassListService:
+    """Missing associated documentation comment in .proto file."""
+
     @staticmethod
-    def ChatStream(request_iterator,
+    def ProcessMassList(request,
             target,
             options=(),
             channel_credentials=None,
@@ -216,12 +317,12 @@ class TextService:
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(
-            request_iterator,
+        return grpc.experimental.unary_unary(
+            request,
             target,
-            '/textservice.TextService/ChatStream',
-            src_dot_protobuf_dot_plot__pb2.ChatMessage.SerializeToString,
-            src_dot_protobuf_dot_plot__pb2.ChatMessage.FromString,
+            '/plot.MassListService/ProcessMassList',
+            src_dot_protobuf_dot_plot__pb2.MassListRequest.SerializeToString,
+            src_dot_protobuf_dot_plot__pb2.MassListResponse.FromString,
             options,
             channel_credentials,
             insecure,

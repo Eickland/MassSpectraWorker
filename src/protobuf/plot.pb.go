@@ -169,30 +169,39 @@ func (x *TextResponse) GetMetadata() map[string]string {
 	return nil
 }
 
-// Для стриминга
-type TextChunk struct {
+type PlotRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	ChunkNumber   int32                  `protobuf:"varint,2,opt,name=chunk_number,json=chunkNumber,proto3" json:"chunk_number,omitempty"`
-	IsLast        bool                   `protobuf:"varint,3,opt,name=is_last,json=isLast,proto3" json:"is_last,omitempty"`
+	XValues       []float64              `protobuf:"fixed64,1,rep,packed,name=x_values,json=xValues,proto3" json:"x_values,omitempty"`
+	YValues       []float64              `protobuf:"fixed64,2,rep,packed,name=y_values,json=yValues,proto3" json:"y_values,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	XLabel        string                 `protobuf:"bytes,4,opt,name=x_label,json=xLabel,proto3" json:"x_label,omitempty"`
+	YLabel        string                 `protobuf:"bytes,5,opt,name=y_label,json=yLabel,proto3" json:"y_label,omitempty"`
+	PlotType      string                 `protobuf:"bytes,6,opt,name=plot_type,json=plotType,proto3" json:"plot_type,omitempty"` // line, bar, scatter, hist
+	Color         string                 `protobuf:"bytes,7,opt,name=color,proto3" json:"color,omitempty"`
+	Grid          bool                   `protobuf:"varint,8,opt,name=grid,proto3" json:"grid,omitempty"`
+	Width         int32                  `protobuf:"varint,9,opt,name=width,proto3" json:"width,omitempty"`                                                                               // ширина в дюймах
+	Height        int32                  `protobuf:"varint,10,opt,name=height,proto3" json:"height,omitempty"`                                                                            // высота в дюймах
+	Dpi           int32                  `protobuf:"varint,11,opt,name=dpi,proto3" json:"dpi,omitempty"`                                                                                  // разрешение
+	Format        string                 `protobuf:"bytes,12,opt,name=format,proto3" json:"format,omitempty"`                                                                             // png, svg, pdf, jpeg
+	Options       map[string]string      `protobuf:"bytes,13,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // дополнительные параметры
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TextChunk) Reset() {
-	*x = TextChunk{}
+func (x *PlotRequest) Reset() {
+	*x = PlotRequest{}
 	mi := &file_src_protobuf_plot_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TextChunk) String() string {
+func (x *PlotRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TextChunk) ProtoMessage() {}
+func (*PlotRequest) ProtoMessage() {}
 
-func (x *TextChunk) ProtoReflect() protoreflect.Message {
+func (x *PlotRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_src_protobuf_plot_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -204,58 +213,277 @@ func (x *TextChunk) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TextChunk.ProtoReflect.Descriptor instead.
-func (*TextChunk) Descriptor() ([]byte, []int) {
+// Deprecated: Use PlotRequest.ProtoReflect.Descriptor instead.
+func (*PlotRequest) Descriptor() ([]byte, []int) {
 	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *TextChunk) GetContent() string {
+func (x *PlotRequest) GetXValues() []float64 {
 	if x != nil {
-		return x.Content
+		return x.XValues
+	}
+	return nil
+}
+
+func (x *PlotRequest) GetYValues() []float64 {
+	if x != nil {
+		return x.YValues
+	}
+	return nil
+}
+
+func (x *PlotRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
 	}
 	return ""
 }
 
-func (x *TextChunk) GetChunkNumber() int32 {
+func (x *PlotRequest) GetXLabel() string {
+	if x != nil {
+		return x.XLabel
+	}
+	return ""
+}
+
+func (x *PlotRequest) GetYLabel() string {
+	if x != nil {
+		return x.YLabel
+	}
+	return ""
+}
+
+func (x *PlotRequest) GetPlotType() string {
+	if x != nil {
+		return x.PlotType
+	}
+	return ""
+}
+
+func (x *PlotRequest) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *PlotRequest) GetGrid() bool {
+	if x != nil {
+		return x.Grid
+	}
+	return false
+}
+
+func (x *PlotRequest) GetWidth() int32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *PlotRequest) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+func (x *PlotRequest) GetDpi() int32 {
+	if x != nil {
+		return x.Dpi
+	}
+	return 0
+}
+
+func (x *PlotRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+func (x *PlotRequest) GetOptions() map[string]string {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+type PlotResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ImageData     []byte                 `protobuf:"bytes,1,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`        // бинарные данные изображения
+	Format        string                 `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"`                               // png, svg, pdf, jpeg
+	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`       // размер в байтах
+	MimeType      string                 `protobuf:"bytes,4,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`           // image/png, image/svg+xml, etc.
+	GeneratedAt   int64                  `protobuf:"varint,5,opt,name=generated_at,json=generatedAt,proto3" json:"generated_at,omitempty"` // timestamp
+	Info          *PlotInfo              `protobuf:"bytes,6,opt,name=info,proto3" json:"info,omitempty"`                                   // метаданные
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlotResponse) Reset() {
+	*x = PlotResponse{}
+	mi := &file_src_protobuf_plot_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlotResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlotResponse) ProtoMessage() {}
+
+func (x *PlotResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_src_protobuf_plot_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlotResponse.ProtoReflect.Descriptor instead.
+func (*PlotResponse) Descriptor() ([]byte, []int) {
+	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *PlotResponse) GetImageData() []byte {
+	if x != nil {
+		return x.ImageData
+	}
+	return nil
+}
+
+func (x *PlotResponse) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+func (x *PlotResponse) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *PlotResponse) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *PlotResponse) GetGeneratedAt() int64 {
+	if x != nil {
+		return x.GeneratedAt
+	}
+	return 0
+}
+
+func (x *PlotResponse) GetInfo() *PlotInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
+}
+
+type PlotChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChunkData     []byte                 `protobuf:"bytes,1,opt,name=chunk_data,json=chunkData,proto3" json:"chunk_data,omitempty"`
+	ChunkNumber   int32                  `protobuf:"varint,2,opt,name=chunk_number,json=chunkNumber,proto3" json:"chunk_number,omitempty"`
+	IsLast        bool                   `protobuf:"varint,3,opt,name=is_last,json=isLast,proto3" json:"is_last,omitempty"`
+	TotalSize     int64                  `protobuf:"varint,4,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlotChunk) Reset() {
+	*x = PlotChunk{}
+	mi := &file_src_protobuf_plot_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlotChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlotChunk) ProtoMessage() {}
+
+func (x *PlotChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_src_protobuf_plot_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlotChunk.ProtoReflect.Descriptor instead.
+func (*PlotChunk) Descriptor() ([]byte, []int) {
+	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PlotChunk) GetChunkData() []byte {
+	if x != nil {
+		return x.ChunkData
+	}
+	return nil
+}
+
+func (x *PlotChunk) GetChunkNumber() int32 {
 	if x != nil {
 		return x.ChunkNumber
 	}
 	return 0
 }
 
-func (x *TextChunk) GetIsLast() bool {
+func (x *PlotChunk) GetIsLast() bool {
 	if x != nil {
 		return x.IsLast
 	}
 	return false
 }
 
-// Анализ текста
-type TextAnalysis struct {
+func (x *PlotChunk) GetTotalSize() int64 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
+}
+
+type MultiPlotRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	WordCount     int32                  `protobuf:"varint,1,opt,name=word_count,json=wordCount,proto3" json:"word_count,omitempty"`
-	CharCount     int32                  `protobuf:"varint,2,opt,name=char_count,json=charCount,proto3" json:"char_count,omitempty"`
-	SentenceCount int32                  `protobuf:"varint,3,opt,name=sentence_count,json=sentenceCount,proto3" json:"sentence_count,omitempty"`
-	WordFrequency map[string]int32       `protobuf:"bytes,4,rep,name=word_frequency,json=wordFrequency,proto3" json:"word_frequency,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Plots         []*PlotRequest         `protobuf:"bytes,1,rep,name=plots,proto3" json:"plots,omitempty"`
+	Layout        string                 `protobuf:"bytes,2,opt,name=layout,proto3" json:"layout,omitempty"` // grid, horizontal, vertical
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TextAnalysis) Reset() {
-	*x = TextAnalysis{}
-	mi := &file_src_protobuf_plot_proto_msgTypes[3]
+func (x *MultiPlotRequest) Reset() {
+	*x = MultiPlotRequest{}
+	mi := &file_src_protobuf_plot_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TextAnalysis) String() string {
+func (x *MultiPlotRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TextAnalysis) ProtoMessage() {}
+func (*MultiPlotRequest) ProtoMessage() {}
 
-func (x *TextAnalysis) ProtoReflect() protoreflect.Message {
-	mi := &file_src_protobuf_plot_proto_msgTypes[3]
+func (x *MultiPlotRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_src_protobuf_plot_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -266,64 +494,50 @@ func (x *TextAnalysis) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TextAnalysis.ProtoReflect.Descriptor instead.
-func (*TextAnalysis) Descriptor() ([]byte, []int) {
-	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{3}
+// Deprecated: Use MultiPlotRequest.ProtoReflect.Descriptor instead.
+func (*MultiPlotRequest) Descriptor() ([]byte, []int) {
+	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *TextAnalysis) GetWordCount() int32 {
+func (x *MultiPlotRequest) GetPlots() []*PlotRequest {
 	if x != nil {
-		return x.WordCount
-	}
-	return 0
-}
-
-func (x *TextAnalysis) GetCharCount() int32 {
-	if x != nil {
-		return x.CharCount
-	}
-	return 0
-}
-
-func (x *TextAnalysis) GetSentenceCount() int32 {
-	if x != nil {
-		return x.SentenceCount
-	}
-	return 0
-}
-
-func (x *TextAnalysis) GetWordFrequency() map[string]int32 {
-	if x != nil {
-		return x.WordFrequency
+		return x.Plots
 	}
 	return nil
 }
 
-// Для чата
-type ChatMessage struct {
+func (x *MultiPlotRequest) GetLayout() string {
+	if x != nil {
+		return x.Layout
+	}
+	return ""
+}
+
+type PlotInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Width         int32                  `protobuf:"varint,2,opt,name=width,proto3" json:"width,omitempty"`
+	Height        int32                  `protobuf:"varint,3,opt,name=height,proto3" json:"height,omitempty"`
+	Dpi           int32                  `protobuf:"varint,4,opt,name=dpi,proto3" json:"dpi,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ChatMessage) Reset() {
-	*x = ChatMessage{}
-	mi := &file_src_protobuf_plot_proto_msgTypes[4]
+func (x *PlotInfo) Reset() {
+	*x = PlotInfo{}
+	mi := &file_src_protobuf_plot_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChatMessage) String() string {
+func (x *PlotInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChatMessage) ProtoMessage() {}
+func (*PlotInfo) ProtoMessage() {}
 
-func (x *ChatMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_src_protobuf_plot_proto_msgTypes[4]
+func (x *PlotInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_src_protobuf_plot_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -334,30 +548,265 @@ func (x *ChatMessage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChatMessage.ProtoReflect.Descriptor instead.
-func (*ChatMessage) Descriptor() ([]byte, []int) {
-	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use PlotInfo.ProtoReflect.Descriptor instead.
+func (*PlotInfo) Descriptor() ([]byte, []int) {
+	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ChatMessage) GetUserId() string {
+func (x *PlotInfo) GetTitle() string {
 	if x != nil {
-		return x.UserId
+		return x.Title
 	}
 	return ""
 }
 
-func (x *ChatMessage) GetMessage() string {
+func (x *PlotInfo) GetWidth() int32 {
 	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *ChatMessage) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
+		return x.Width
 	}
 	return 0
+}
+
+func (x *PlotInfo) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+func (x *PlotInfo) GetDpi() int32 {
+	if x != nil {
+		return x.Dpi
+	}
+	return 0
+}
+
+type ElementRange struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Min           int32                  `protobuf:"varint,1,opt,name=min,proto3" json:"min,omitempty"`
+	Max           int32                  `protobuf:"varint,2,opt,name=max,proto3" json:"max,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ElementRange) Reset() {
+	*x = ElementRange{}
+	mi := &file_src_protobuf_plot_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ElementRange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ElementRange) ProtoMessage() {}
+
+func (x *ElementRange) ProtoReflect() protoreflect.Message {
+	mi := &file_src_protobuf_plot_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ElementRange.ProtoReflect.Descriptor instead.
+func (*ElementRange) Descriptor() ([]byte, []int) {
+	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ElementRange) GetMin() int32 {
+	if x != nil {
+		return x.Min
+	}
+	return 0
+}
+
+func (x *ElementRange) GetMax() int32 {
+	if x != nil {
+		return x.Max
+	}
+	return 0
+}
+
+type MassListRequest struct {
+	state          protoimpl.MessageState   `protogen:"open.v1"`
+	SpectraName    string                   `protobuf:"bytes,1,opt,name=spectra_name,json=spectraName,proto3" json:"spectra_name,omitempty"`
+	LowPercentile  float32                  `protobuf:"fixed32,2,opt,name=low_percentile,json=lowPercentile,proto3" json:"low_percentile,omitempty"`
+	HighPercentile float32                  `protobuf:"fixed32,3,opt,name=high_percentile,json=highPercentile,proto3" json:"high_percentile,omitempty"`
+	RelError       float32                  `protobuf:"fixed32,4,opt,name=rel_error,json=relError,proto3" json:"rel_error,omitempty"`
+	ChargeMax      int32                    `protobuf:"varint,5,opt,name=charge_max,json=chargeMax,proto3" json:"charge_max,omitempty"`
+	BruttoDict     map[string]*ElementRange `protobuf:"bytes,6,rep,name=brutto_dict,json=bruttoDict,proto3" json:"brutto_dict,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Protocole      string                   `protobuf:"bytes,7,opt,name=protocole,proto3" json:"protocole,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MassListRequest) Reset() {
+	*x = MassListRequest{}
+	mi := &file_src_protobuf_plot_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MassListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MassListRequest) ProtoMessage() {}
+
+func (x *MassListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_src_protobuf_plot_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MassListRequest.ProtoReflect.Descriptor instead.
+func (*MassListRequest) Descriptor() ([]byte, []int) {
+	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MassListRequest) GetSpectraName() string {
+	if x != nil {
+		return x.SpectraName
+	}
+	return ""
+}
+
+func (x *MassListRequest) GetLowPercentile() float32 {
+	if x != nil {
+		return x.LowPercentile
+	}
+	return 0
+}
+
+func (x *MassListRequest) GetHighPercentile() float32 {
+	if x != nil {
+		return x.HighPercentile
+	}
+	return 0
+}
+
+func (x *MassListRequest) GetRelError() float32 {
+	if x != nil {
+		return x.RelError
+	}
+	return 0
+}
+
+func (x *MassListRequest) GetChargeMax() int32 {
+	if x != nil {
+		return x.ChargeMax
+	}
+	return 0
+}
+
+func (x *MassListRequest) GetBruttoDict() map[string]*ElementRange {
+	if x != nil {
+		return x.BruttoDict
+	}
+	return nil
+}
+
+func (x *MassListRequest) GetProtocole() string {
+	if x != nil {
+		return x.Protocole
+	}
+	return ""
+}
+
+type MassListResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ImageData     []byte                 `protobuf:"bytes,1,opt,name=image_data,json=imageData,proto3" json:"image_data,omitempty"`
+	Format        string                 `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"`
+	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	MimeType      string                 `protobuf:"bytes,4,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	GeneratedAt   int64                  `protobuf:"varint,5,opt,name=generated_at,json=generatedAt,proto3" json:"generated_at,omitempty"`
+	Info          *PlotInfo              `protobuf:"bytes,6,opt,name=info,proto3" json:"info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MassListResponse) Reset() {
+	*x = MassListResponse{}
+	mi := &file_src_protobuf_plot_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MassListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MassListResponse) ProtoMessage() {}
+
+func (x *MassListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_src_protobuf_plot_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MassListResponse.ProtoReflect.Descriptor instead.
+func (*MassListResponse) Descriptor() ([]byte, []int) {
+	return file_src_protobuf_plot_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MassListResponse) GetImageData() []byte {
+	if x != nil {
+		return x.ImageData
+	}
+	return nil
+}
+
+func (x *MassListResponse) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+func (x *MassListResponse) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *MassListResponse) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *MassListResponse) GetGeneratedAt() int64 {
+	if x != nil {
+		return x.GeneratedAt
+	}
+	return 0
+}
+
+func (x *MassListResponse) GetInfo() *PlotInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
 }
 
 var File_src_protobuf_plot_proto protoreflect.FileDescriptor
@@ -378,31 +827,83 @@ const file_src_protobuf_plot_proto_rawDesc = "" +
 	"\bmetadata\x18\x05 \x03(\v2 .plot.TextResponse.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"a\n" +
-	"\tTextChunk\x12\x18\n" +
-	"\acontent\x18\x01 \x01(\tR\acontent\x12!\n" +
-	"\fchunk_number\x18\x02 \x01(\x05R\vchunkNumber\x12\x17\n" +
-	"\ais_last\x18\x03 \x01(\bR\x06isLast\"\x83\x02\n" +
-	"\fTextAnalysis\x12\x1d\n" +
-	"\n" +
-	"word_count\x18\x01 \x01(\x05R\twordCount\x12\x1d\n" +
-	"\n" +
-	"char_count\x18\x02 \x01(\x05R\tcharCount\x12%\n" +
-	"\x0esentence_count\x18\x03 \x01(\x05R\rsentenceCount\x12L\n" +
-	"\x0eword_frequency\x18\x04 \x03(\v2%.plot.TextAnalysis.WordFrequencyEntryR\rwordFrequency\x1a@\n" +
-	"\x12WordFrequencyEntry\x12\x10\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa0\x03\n" +
+	"\vPlotRequest\x12\x19\n" +
+	"\bx_values\x18\x01 \x03(\x01R\axValues\x12\x19\n" +
+	"\by_values\x18\x02 \x03(\x01R\ayValues\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x17\n" +
+	"\ax_label\x18\x04 \x01(\tR\x06xLabel\x12\x17\n" +
+	"\ay_label\x18\x05 \x01(\tR\x06yLabel\x12\x1b\n" +
+	"\tplot_type\x18\x06 \x01(\tR\bplotType\x12\x14\n" +
+	"\x05color\x18\a \x01(\tR\x05color\x12\x12\n" +
+	"\x04grid\x18\b \x01(\bR\x04grid\x12\x14\n" +
+	"\x05width\x18\t \x01(\x05R\x05width\x12\x16\n" +
+	"\x06height\x18\n" +
+	" \x01(\x05R\x06height\x12\x10\n" +
+	"\x03dpi\x18\v \x01(\x05R\x03dpi\x12\x16\n" +
+	"\x06format\x18\f \x01(\tR\x06format\x128\n" +
+	"\aoptions\x18\r \x03(\v2\x1e.plot.PlotRequest.OptionsEntryR\aoptions\x1a:\n" +
+	"\fOptionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"^\n" +
-	"\vChatMessage\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp2\xf2\x01\n" +
-	"\vTextService\x124\n" +
-	"\vProcessText\x12\x11.plot.TextRequest\x1a\x12.plot.TextResponse\x129\n" +
-	"\x11StreamProcessText\x12\x11.plot.TextRequest\x1a\x0f.plot.TextChunk0\x01\x12:\n" +
-	"\x11AnalyzeTextStream\x12\x0f.plot.TextChunk\x1a\x12.plot.TextAnalysis(\x01\x126\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc8\x01\n" +
+	"\fPlotResponse\x12\x1d\n" +
 	"\n" +
-	"ChatStream\x12\x11.plot.ChatMessage\x1a\x11.plot.ChatMessage(\x010\x01B\x18Z\x16src/protobuf/plot;plotb\x06proto3"
+	"image_data\x18\x01 \x01(\fR\timageData\x12\x16\n" +
+	"\x06format\x18\x02 \x01(\tR\x06format\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12\x1b\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\x12!\n" +
+	"\fgenerated_at\x18\x05 \x01(\x03R\vgeneratedAt\x12\"\n" +
+	"\x04info\x18\x06 \x01(\v2\x0e.plot.PlotInfoR\x04info\"\x85\x01\n" +
+	"\tPlotChunk\x12\x1d\n" +
+	"\n" +
+	"chunk_data\x18\x01 \x01(\fR\tchunkData\x12!\n" +
+	"\fchunk_number\x18\x02 \x01(\x05R\vchunkNumber\x12\x17\n" +
+	"\ais_last\x18\x03 \x01(\bR\x06isLast\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x04 \x01(\x03R\ttotalSize\"S\n" +
+	"\x10MultiPlotRequest\x12'\n" +
+	"\x05plots\x18\x01 \x03(\v2\x11.plot.PlotRequestR\x05plots\x12\x16\n" +
+	"\x06layout\x18\x02 \x01(\tR\x06layout\"`\n" +
+	"\bPlotInfo\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12\x14\n" +
+	"\x05width\x18\x02 \x01(\x05R\x05width\x12\x16\n" +
+	"\x06height\x18\x03 \x01(\x05R\x06height\x12\x10\n" +
+	"\x03dpi\x18\x04 \x01(\x05R\x03dpi\"2\n" +
+	"\fElementRange\x12\x10\n" +
+	"\x03min\x18\x01 \x01(\x05R\x03min\x12\x10\n" +
+	"\x03max\x18\x02 \x01(\x05R\x03max\"\xf9\x02\n" +
+	"\x0fMassListRequest\x12!\n" +
+	"\fspectra_name\x18\x01 \x01(\tR\vspectraName\x12%\n" +
+	"\x0elow_percentile\x18\x02 \x01(\x02R\rlowPercentile\x12'\n" +
+	"\x0fhigh_percentile\x18\x03 \x01(\x02R\x0ehighPercentile\x12\x1b\n" +
+	"\trel_error\x18\x04 \x01(\x02R\brelError\x12\x1d\n" +
+	"\n" +
+	"charge_max\x18\x05 \x01(\x05R\tchargeMax\x12F\n" +
+	"\vbrutto_dict\x18\x06 \x03(\v2%.plot.MassListRequest.BruttoDictEntryR\n" +
+	"bruttoDict\x12\x1c\n" +
+	"\tprotocole\x18\a \x01(\tR\tprotocole\x1aQ\n" +
+	"\x0fBruttoDictEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12(\n" +
+	"\x05value\x18\x02 \x01(\v2\x12.plot.ElementRangeR\x05value:\x028\x01\"\xcc\x01\n" +
+	"\x10MassListResponse\x12\x1d\n" +
+	"\n" +
+	"image_data\x18\x01 \x01(\fR\timageData\x12\x16\n" +
+	"\x06format\x18\x02 \x01(\tR\x06format\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12\x1b\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\x12!\n" +
+	"\fgenerated_at\x18\x05 \x01(\x03R\vgeneratedAt\x12\"\n" +
+	"\x04info\x18\x06 \x01(\v2\x0e.plot.PlotInfoR\x04info2C\n" +
+	"\vTextService\x124\n" +
+	"\vProcessText\x12\x11.plot.TextRequest\x1a\x12.plot.TextResponse2\xbf\x01\n" +
+	"\vPlotService\x125\n" +
+	"\fGeneratePlot\x12\x11.plot.PlotRequest\x1a\x12.plot.PlotResponse\x122\n" +
+	"\n" +
+	"StreamPlot\x12\x11.plot.PlotRequest\x1a\x0f.plot.PlotChunk0\x01\x12E\n" +
+	"\x15GenerateMultiplePlots\x12\x16.plot.MultiPlotRequest\x1a\x12.plot.PlotResponse0\x012S\n" +
+	"\x0fMassListService\x12@\n" +
+	"\x0fProcessMassList\x12\x15.plot.MassListRequest\x1a\x16.plot.MassListResponseB\x18Z\x16src/protobuf/plot;plotb\x06proto3"
 
 var (
 	file_src_protobuf_plot_proto_rawDescOnce sync.Once
@@ -416,32 +917,45 @@ func file_src_protobuf_plot_proto_rawDescGZIP() []byte {
 	return file_src_protobuf_plot_proto_rawDescData
 }
 
-var file_src_protobuf_plot_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_src_protobuf_plot_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_src_protobuf_plot_proto_goTypes = []any{
-	(*TextRequest)(nil),  // 0: plot.TextRequest
-	(*TextResponse)(nil), // 1: plot.TextResponse
-	(*TextChunk)(nil),    // 2: plot.TextChunk
-	(*TextAnalysis)(nil), // 3: plot.TextAnalysis
-	(*ChatMessage)(nil),  // 4: plot.ChatMessage
-	nil,                  // 5: plot.TextResponse.MetadataEntry
-	nil,                  // 6: plot.TextAnalysis.WordFrequencyEntry
+	(*TextRequest)(nil),      // 0: plot.TextRequest
+	(*TextResponse)(nil),     // 1: plot.TextResponse
+	(*PlotRequest)(nil),      // 2: plot.PlotRequest
+	(*PlotResponse)(nil),     // 3: plot.PlotResponse
+	(*PlotChunk)(nil),        // 4: plot.PlotChunk
+	(*MultiPlotRequest)(nil), // 5: plot.MultiPlotRequest
+	(*PlotInfo)(nil),         // 6: plot.PlotInfo
+	(*ElementRange)(nil),     // 7: plot.ElementRange
+	(*MassListRequest)(nil),  // 8: plot.MassListRequest
+	(*MassListResponse)(nil), // 9: plot.MassListResponse
+	nil,                      // 10: plot.TextResponse.MetadataEntry
+	nil,                      // 11: plot.PlotRequest.OptionsEntry
+	nil,                      // 12: plot.MassListRequest.BruttoDictEntry
 }
 var file_src_protobuf_plot_proto_depIdxs = []int32{
-	5, // 0: plot.TextResponse.metadata:type_name -> plot.TextResponse.MetadataEntry
-	6, // 1: plot.TextAnalysis.word_frequency:type_name -> plot.TextAnalysis.WordFrequencyEntry
-	0, // 2: plot.TextService.ProcessText:input_type -> plot.TextRequest
-	0, // 3: plot.TextService.StreamProcessText:input_type -> plot.TextRequest
-	2, // 4: plot.TextService.AnalyzeTextStream:input_type -> plot.TextChunk
-	4, // 5: plot.TextService.ChatStream:input_type -> plot.ChatMessage
-	1, // 6: plot.TextService.ProcessText:output_type -> plot.TextResponse
-	2, // 7: plot.TextService.StreamProcessText:output_type -> plot.TextChunk
-	3, // 8: plot.TextService.AnalyzeTextStream:output_type -> plot.TextAnalysis
-	4, // 9: plot.TextService.ChatStream:output_type -> plot.ChatMessage
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	10, // 0: plot.TextResponse.metadata:type_name -> plot.TextResponse.MetadataEntry
+	11, // 1: plot.PlotRequest.options:type_name -> plot.PlotRequest.OptionsEntry
+	6,  // 2: plot.PlotResponse.info:type_name -> plot.PlotInfo
+	2,  // 3: plot.MultiPlotRequest.plots:type_name -> plot.PlotRequest
+	12, // 4: plot.MassListRequest.brutto_dict:type_name -> plot.MassListRequest.BruttoDictEntry
+	6,  // 5: plot.MassListResponse.info:type_name -> plot.PlotInfo
+	7,  // 6: plot.MassListRequest.BruttoDictEntry.value:type_name -> plot.ElementRange
+	0,  // 7: plot.TextService.ProcessText:input_type -> plot.TextRequest
+	2,  // 8: plot.PlotService.GeneratePlot:input_type -> plot.PlotRequest
+	2,  // 9: plot.PlotService.StreamPlot:input_type -> plot.PlotRequest
+	5,  // 10: plot.PlotService.GenerateMultiplePlots:input_type -> plot.MultiPlotRequest
+	8,  // 11: plot.MassListService.ProcessMassList:input_type -> plot.MassListRequest
+	1,  // 12: plot.TextService.ProcessText:output_type -> plot.TextResponse
+	3,  // 13: plot.PlotService.GeneratePlot:output_type -> plot.PlotResponse
+	4,  // 14: plot.PlotService.StreamPlot:output_type -> plot.PlotChunk
+	3,  // 15: plot.PlotService.GenerateMultiplePlots:output_type -> plot.PlotResponse
+	9,  // 16: plot.MassListService.ProcessMassList:output_type -> plot.MassListResponse
+	12, // [12:17] is the sub-list for method output_type
+	7,  // [7:12] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_src_protobuf_plot_proto_init() }
@@ -455,9 +969,9 @@ func file_src_protobuf_plot_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_src_protobuf_plot_proto_rawDesc), len(file_src_protobuf_plot_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   13,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   3,
 		},
 		GoTypes:           file_src_protobuf_plot_proto_goTypes,
 		DependencyIndexes: file_src_protobuf_plot_proto_depIdxs,

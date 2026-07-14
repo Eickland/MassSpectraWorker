@@ -21,10 +21,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TextService_ProcessText_FullMethodName       = "/plot.TextService/ProcessText"
-	TextService_StreamProcessText_FullMethodName = "/plot.TextService/StreamProcessText"
-	TextService_AnalyzeTextStream_FullMethodName = "/plot.TextService/AnalyzeTextStream"
-	TextService_ChatStream_FullMethodName        = "/plot.TextService/ChatStream"
+	TextService_ProcessText_FullMethodName = "/plot.TextService/ProcessText"
 )
 
 // TextServiceClient is the client API for TextService service.
@@ -35,12 +32,6 @@ const (
 type TextServiceClient interface {
 	// Обычный RPC (запрос-ответ)
 	ProcessText(ctx context.Context, in *TextRequest, opts ...grpc.CallOption) (*TextResponse, error)
-	// Server Streaming (сервер отправляет несколько сообщений)
-	StreamProcessText(ctx context.Context, in *TextRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TextChunk], error)
-	// Client Streaming (клиент отправляет несколько сообщений)
-	AnalyzeTextStream(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[TextChunk, TextAnalysis], error)
-	// Bidirectional Streaming (оба направления)
-	ChatStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ChatMessage, ChatMessage], error)
 }
 
 type textServiceClient struct {
@@ -61,51 +52,6 @@ func (c *textServiceClient) ProcessText(ctx context.Context, in *TextRequest, op
 	return out, nil
 }
 
-func (c *textServiceClient) StreamProcessText(ctx context.Context, in *TextRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TextChunk], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &TextService_ServiceDesc.Streams[0], TextService_StreamProcessText_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[TextRequest, TextChunk]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TextService_StreamProcessTextClient = grpc.ServerStreamingClient[TextChunk]
-
-func (c *textServiceClient) AnalyzeTextStream(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[TextChunk, TextAnalysis], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &TextService_ServiceDesc.Streams[1], TextService_AnalyzeTextStream_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[TextChunk, TextAnalysis]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TextService_AnalyzeTextStreamClient = grpc.ClientStreamingClient[TextChunk, TextAnalysis]
-
-func (c *textServiceClient) ChatStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ChatMessage, ChatMessage], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &TextService_ServiceDesc.Streams[2], TextService_ChatStream_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[ChatMessage, ChatMessage]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TextService_ChatStreamClient = grpc.BidiStreamingClient[ChatMessage, ChatMessage]
-
 // TextServiceServer is the server API for TextService service.
 // All implementations must embed UnimplementedTextServiceServer
 // for forward compatibility.
@@ -114,12 +60,6 @@ type TextService_ChatStreamClient = grpc.BidiStreamingClient[ChatMessage, ChatMe
 type TextServiceServer interface {
 	// Обычный RPC (запрос-ответ)
 	ProcessText(context.Context, *TextRequest) (*TextResponse, error)
-	// Server Streaming (сервер отправляет несколько сообщений)
-	StreamProcessText(*TextRequest, grpc.ServerStreamingServer[TextChunk]) error
-	// Client Streaming (клиент отправляет несколько сообщений)
-	AnalyzeTextStream(grpc.ClientStreamingServer[TextChunk, TextAnalysis]) error
-	// Bidirectional Streaming (оба направления)
-	ChatStream(grpc.BidiStreamingServer[ChatMessage, ChatMessage]) error
 	mustEmbedUnimplementedTextServiceServer()
 }
 
@@ -132,15 +72,6 @@ type UnimplementedTextServiceServer struct{}
 
 func (UnimplementedTextServiceServer) ProcessText(context.Context, *TextRequest) (*TextResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ProcessText not implemented")
-}
-func (UnimplementedTextServiceServer) StreamProcessText(*TextRequest, grpc.ServerStreamingServer[TextChunk]) error {
-	return status.Error(codes.Unimplemented, "method StreamProcessText not implemented")
-}
-func (UnimplementedTextServiceServer) AnalyzeTextStream(grpc.ClientStreamingServer[TextChunk, TextAnalysis]) error {
-	return status.Error(codes.Unimplemented, "method AnalyzeTextStream not implemented")
-}
-func (UnimplementedTextServiceServer) ChatStream(grpc.BidiStreamingServer[ChatMessage, ChatMessage]) error {
-	return status.Error(codes.Unimplemented, "method ChatStream not implemented")
 }
 func (UnimplementedTextServiceServer) mustEmbedUnimplementedTextServiceServer() {}
 func (UnimplementedTextServiceServer) testEmbeddedByValue()                     {}
@@ -181,31 +112,6 @@ func _TextService_ProcessText_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TextService_StreamProcessText_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(TextRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(TextServiceServer).StreamProcessText(m, &grpc.GenericServerStream[TextRequest, TextChunk]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TextService_StreamProcessTextServer = grpc.ServerStreamingServer[TextChunk]
-
-func _TextService_AnalyzeTextStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(TextServiceServer).AnalyzeTextStream(&grpc.GenericServerStream[TextChunk, TextAnalysis]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TextService_AnalyzeTextStreamServer = grpc.ClientStreamingServer[TextChunk, TextAnalysis]
-
-func _TextService_ChatStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(TextServiceServer).ChatStream(&grpc.GenericServerStream[ChatMessage, ChatMessage]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TextService_ChatStreamServer = grpc.BidiStreamingServer[ChatMessage, ChatMessage]
-
 // TextService_ServiceDesc is the grpc.ServiceDesc for TextService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -218,23 +124,299 @@ var TextService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _TextService_ProcessText_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "src/protobuf/plot.proto",
+}
+
+const (
+	PlotService_GeneratePlot_FullMethodName          = "/plot.PlotService/GeneratePlot"
+	PlotService_StreamPlot_FullMethodName            = "/plot.PlotService/StreamPlot"
+	PlotService_GenerateMultiplePlots_FullMethodName = "/plot.PlotService/GenerateMultiplePlots"
+)
+
+// PlotServiceClient is the client API for PlotService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type PlotServiceClient interface {
+	// Обычный RPC для получения графика
+	GeneratePlot(ctx context.Context, in *PlotRequest, opts ...grpc.CallOption) (*PlotResponse, error)
+	// Стриминг для больших графиков
+	StreamPlot(ctx context.Context, in *PlotRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PlotChunk], error)
+	// Множество графиков
+	GenerateMultiplePlots(ctx context.Context, in *MultiPlotRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PlotResponse], error)
+}
+
+type plotServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewPlotServiceClient(cc grpc.ClientConnInterface) PlotServiceClient {
+	return &plotServiceClient{cc}
+}
+
+func (c *plotServiceClient) GeneratePlot(ctx context.Context, in *PlotRequest, opts ...grpc.CallOption) (*PlotResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PlotResponse)
+	err := c.cc.Invoke(ctx, PlotService_GeneratePlot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *plotServiceClient) StreamPlot(ctx context.Context, in *PlotRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PlotChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PlotService_ServiceDesc.Streams[0], PlotService_StreamPlot_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PlotRequest, PlotChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PlotService_StreamPlotClient = grpc.ServerStreamingClient[PlotChunk]
+
+func (c *plotServiceClient) GenerateMultiplePlots(ctx context.Context, in *MultiPlotRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PlotResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PlotService_ServiceDesc.Streams[1], PlotService_GenerateMultiplePlots_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[MultiPlotRequest, PlotResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PlotService_GenerateMultiplePlotsClient = grpc.ServerStreamingClient[PlotResponse]
+
+// PlotServiceServer is the server API for PlotService service.
+// All implementations must embed UnimplementedPlotServiceServer
+// for forward compatibility.
+type PlotServiceServer interface {
+	// Обычный RPC для получения графика
+	GeneratePlot(context.Context, *PlotRequest) (*PlotResponse, error)
+	// Стриминг для больших графиков
+	StreamPlot(*PlotRequest, grpc.ServerStreamingServer[PlotChunk]) error
+	// Множество графиков
+	GenerateMultiplePlots(*MultiPlotRequest, grpc.ServerStreamingServer[PlotResponse]) error
+	mustEmbedUnimplementedPlotServiceServer()
+}
+
+// UnimplementedPlotServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedPlotServiceServer struct{}
+
+func (UnimplementedPlotServiceServer) GeneratePlot(context.Context, *PlotRequest) (*PlotResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GeneratePlot not implemented")
+}
+func (UnimplementedPlotServiceServer) StreamPlot(*PlotRequest, grpc.ServerStreamingServer[PlotChunk]) error {
+	return status.Error(codes.Unimplemented, "method StreamPlot not implemented")
+}
+func (UnimplementedPlotServiceServer) GenerateMultiplePlots(*MultiPlotRequest, grpc.ServerStreamingServer[PlotResponse]) error {
+	return status.Error(codes.Unimplemented, "method GenerateMultiplePlots not implemented")
+}
+func (UnimplementedPlotServiceServer) mustEmbedUnimplementedPlotServiceServer() {}
+func (UnimplementedPlotServiceServer) testEmbeddedByValue()                     {}
+
+// UnsafePlotServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PlotServiceServer will
+// result in compilation errors.
+type UnsafePlotServiceServer interface {
+	mustEmbedUnimplementedPlotServiceServer()
+}
+
+func RegisterPlotServiceServer(s grpc.ServiceRegistrar, srv PlotServiceServer) {
+	// If the following call panics, it indicates UnimplementedPlotServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&PlotService_ServiceDesc, srv)
+}
+
+func _PlotService_GeneratePlot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PlotServiceServer).GeneratePlot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PlotService_GeneratePlot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PlotServiceServer).GeneratePlot(ctx, req.(*PlotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PlotService_StreamPlot_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(PlotRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PlotServiceServer).StreamPlot(m, &grpc.GenericServerStream[PlotRequest, PlotChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PlotService_StreamPlotServer = grpc.ServerStreamingServer[PlotChunk]
+
+func _PlotService_GenerateMultiplePlots_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(MultiPlotRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PlotServiceServer).GenerateMultiplePlots(m, &grpc.GenericServerStream[MultiPlotRequest, PlotResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PlotService_GenerateMultiplePlotsServer = grpc.ServerStreamingServer[PlotResponse]
+
+// PlotService_ServiceDesc is the grpc.ServiceDesc for PlotService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var PlotService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "plot.PlotService",
+	HandlerType: (*PlotServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
 		{
-			StreamName:    "StreamProcessText",
-			Handler:       _TextService_StreamProcessText_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "AnalyzeTextStream",
-			Handler:       _TextService_AnalyzeTextStream_Handler,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "ChatStream",
-			Handler:       _TextService_ChatStream_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
+			MethodName: "GeneratePlot",
+			Handler:    _PlotService_GeneratePlot_Handler,
 		},
 	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamPlot",
+			Handler:       _PlotService_StreamPlot_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "GenerateMultiplePlots",
+			Handler:       _PlotService_GenerateMultiplePlots_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "src/protobuf/plot.proto",
+}
+
+const (
+	MassListService_ProcessMassList_FullMethodName = "/plot.MassListService/ProcessMassList"
+)
+
+// MassListServiceClient is the client API for MassListService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type MassListServiceClient interface {
+	ProcessMassList(ctx context.Context, in *MassListRequest, opts ...grpc.CallOption) (*MassListResponse, error)
+}
+
+type massListServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewMassListServiceClient(cc grpc.ClientConnInterface) MassListServiceClient {
+	return &massListServiceClient{cc}
+}
+
+func (c *massListServiceClient) ProcessMassList(ctx context.Context, in *MassListRequest, opts ...grpc.CallOption) (*MassListResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MassListResponse)
+	err := c.cc.Invoke(ctx, MassListService_ProcessMassList_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MassListServiceServer is the server API for MassListService service.
+// All implementations must embed UnimplementedMassListServiceServer
+// for forward compatibility.
+type MassListServiceServer interface {
+	ProcessMassList(context.Context, *MassListRequest) (*MassListResponse, error)
+	mustEmbedUnimplementedMassListServiceServer()
+}
+
+// UnimplementedMassListServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedMassListServiceServer struct{}
+
+func (UnimplementedMassListServiceServer) ProcessMassList(context.Context, *MassListRequest) (*MassListResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProcessMassList not implemented")
+}
+func (UnimplementedMassListServiceServer) mustEmbedUnimplementedMassListServiceServer() {}
+func (UnimplementedMassListServiceServer) testEmbeddedByValue()                         {}
+
+// UnsafeMassListServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to MassListServiceServer will
+// result in compilation errors.
+type UnsafeMassListServiceServer interface {
+	mustEmbedUnimplementedMassListServiceServer()
+}
+
+func RegisterMassListServiceServer(s grpc.ServiceRegistrar, srv MassListServiceServer) {
+	// If the following call panics, it indicates UnimplementedMassListServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&MassListService_ServiceDesc, srv)
+}
+
+func _MassListService_ProcessMassList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MassListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MassListServiceServer).ProcessMassList(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MassListService_ProcessMassList_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MassListServiceServer).ProcessMassList(ctx, req.(*MassListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// MassListService_ServiceDesc is the grpc.ServiceDesc for MassListService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var MassListService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "plot.MassListService",
+	HandlerType: (*MassListServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ProcessMassList",
+			Handler:    _MassListService_ProcessMassList_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "src/protobuf/plot.proto",
 }

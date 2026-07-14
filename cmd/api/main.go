@@ -1,190 +1,81 @@
+// cmd/http-server/main.go
 package main
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
-	"sync"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
-	"google.golang.org/grpc"
-
-	pb "Mass_spectra_worker/src/protobuf/plot"
+	grpcclient "MassSpectraWorker/internal/client"
+	"MassSpectraWorker/internal/handlers"
 )
-
-type SpectraCache struct {
-	mu    sync.RWMutex
-	cache map[string]*CachedResult
-}
-
-type CachedResult struct {
-	Data           [][]float64 `json:"data"`
-	NumPeaks       int         `json:"num_peaks"`
-	NumAssignments int         `json:"num_assignments"`
-	CreatedAt      time.Time   `json:"created_at"`
-	VKPlot         string      `json:"vk_plot"` // base64 или plotly JSON
-	SpectrumPlot   string      `json:"spectrum_plot"`
-}
-
-var (
-	cache      = &SpectraCache{cache: make(map[string]*CachedResult)}
-	grpcClient pb.MassSpectraServiceClient
-)
-
-func initGRPC() {
-	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
-	}
-	grpcClient = pb.NewMassSpectraServiceClient(conn)
-}
-
-func generateCacheKey(params map[string]interface{}) string {
-	// Генерируем ключ на основе всех параметров
-	data, _ := json.Marshal(params)
-	return string(data)
-}
-
-// Быстрый рендер графиков в Go (используем go-plotly или gonum)
-func renderPlots(data [][]float64) (string, string) {
-	// Здесь вы можете использовать:
-	// 1. Gonum/plot для быстрой генерации PNG
-	// 2. Plotly JSON для интерактивных графиков в браузере
-	// 3. Или просто возвращать данные для frontend
-
-	// Пример: готовим данные для Plotly
-	vkPlot := plotlyScatter(data)
-	spectrumPlot := plotlySpectrum(data)
-
-	return vkPlot, spectrumPlot
-}
-
-func processHandler(c *gin.Context) {
-	var req struct {
-		FilePath       string  `json:"file_path"`
-		LowPercentile  float64 `json:"low_percentile"`
-		HighPercentile float64 `json:"high_percentile"`
-		RelError       float64 `json:"rel_error"`
-		CMin           int32   `json:"c_min"`
-		CMax           int32   `json:"c_max"`
-	}
-
-	if err := c.BindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Создаем ключ кеша
-	cacheKey := generateCacheKey(map[string]interface{}{
-		"file":  req.FilePath,
-		"low":   req.LowPercentile,
-		"high":  req.HighPercentile,
-		"error": req.RelError,
-	})
-
-	// Проверяем кеш
-	cache.mu.RLock()
-	if cached, ok := cache.cache[cacheKey]; ok {
-		cache.mu.RUnlock()
-		c.JSON(200, gin.H{
-			"cached": true,
-			"result": cached,
-		})
-		return
-	}
-	cache.mu.RUnlock()
-
-	// Если нет в кеше - отправляем в Python
-	grpcReq := &pb.ProcessRequest{
-		FilePath:       req.FilePath,
-		LowPercentile:  req.LowPercentile,
-		HighPercentile: req.HighPercentile,
-		RelError:       req.RelError,
-		CMin:           req.CMin,
-		CMax:           req.CMax,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	resp, err := grpcClient.ProcessSpectra(ctx, grpcReq)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Парсим результат
-	var data map[string]interface{}
-	json.Unmarshal([]byte(resp.ResultJson), &data)
-
-	// Готовим результат
-	result := &CachedResult{
-		NumPeaks:       int(resp.NumPeaks),
-		NumAssignments: int(resp.NumAssignments),
-		CreatedAt:      time.Now(),
-	}
-
-	// Преобразуем данные в формат для графиков
-	// Здесь можно сделать быструю обработку на Go
-	result.VKPlot, result.SpectrumPlot = renderPlots(data["data"].([]interface{}))
-
-	// Сохраняем в кеш
-	cache.mu.Lock()
-	cache.cache[cacheKey] = result
-	cache.mu.Unlock()
-
-	c.JSON(200, gin.H{
-		"cached": false,
-		"result": result,
-	})
-}
-
-// WebSocket для реального времени
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-func wsHandler(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Print("upgrade:", err)
-		return
-	}
-	defer conn.Close()
-
-	for {
-		// Получаем параметры от клиента
-		var params map[string]interface{}
-		err := conn.ReadJSON(&params)
-		if err != nil {
-			break
-		}
-
-		// Отправляем прогресс
-		conn.WriteJSON(gin.H{"type": "progress", "value": 10})
-
-		// Запускаем обработку
-		// ...
-
-		conn.WriteJSON(gin.H{"type": "result", "data": result})
-	}
-}
 
 func main() {
-	initGRPC()
+	fmt.Println("=== MassSpectraWorker HTTP API Server ===")
+	fmt.Println("Starting HTTP server with gRPC client...")
 
-	r := gin.Default()
+	// 1. Инициализируем gRPC клиент
+	grpcClient, err := grpcclient.GetClient()
+	if err != nil {
+		log.Fatalf("❌ Failed to initialize gRPC client: %v", err)
+	}
+	defer grpcClient.Close()
 
-	// Статика
-	r.Static("/static", "./static")
-	r.LoadHTMLFiles("templates/index.html")
+	// 2. Создаем обработчики
+	plotHandler, err := handlers.NewPlotHandler()
+	if err != nil {
+		log.Fatalf("❌ Failed to create handler: %v", err)
+	}
 
-	// API
-	r.POST("/api/process", processHandler)
-	r.GET("/ws", gin.WrapH(http.HandlerFunc(wsHandler)))
+	// 3. Регистрируем маршруты
+	http.HandleFunc("POST /api/plot", plotHandler.GeneratePlot)
+	http.HandleFunc("POST /api/plot/stream", plotHandler.StreamPlot)
+	http.HandleFunc("GET /api/health", plotHandler.HealthCheck)
+	http.HandleFunc("GET /api/info", plotHandler.GetInfo)
 
-	r.Run(":8080")
+	// 4. Настраиваем HTTP сервер
+	server := &http.Server{
+		Addr:         ":8080",
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	// 5. Запускаем сервер в горутине
+	go func() {
+		fmt.Println("✅ HTTP server started on http://localhost:8080")
+		fmt.Println("📌 Endpoints:")
+		fmt.Println("   POST /api/plot - Generate plot")
+		fmt.Println("   POST /api/plot/stream - Generate plot with streaming")
+		fmt.Println("   GET  /api/health - Health check")
+		fmt.Println("   GET  /api/info - Service info")
+		fmt.Println()
+		fmt.Println("Press Ctrl+C to stop...")
+
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("❌ Server error: %v", err)
+		}
+	}()
+
+	// 6. Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	fmt.Println("\n🛑 Shutting down server...")
+
+	// Таймаут для завершения
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("❌ Server shutdown failed: %v", err)
+	}
+
+	fmt.Println("✅ Server stopped gracefully")
 }

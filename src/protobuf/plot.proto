@@ -3,19 +3,13 @@ syntax = "proto3";
 
 package plot;
 option go_package = "src/protobuf/plot;plot";
+
+
 // Сервис с методами
 service TextService {
   // Обычный RPC (запрос-ответ)
   rpc ProcessText (TextRequest) returns (TextResponse);
   
-  // Server Streaming (сервер отправляет несколько сообщений)
-  rpc StreamProcessText (TextRequest) returns (stream TextChunk);
-  
-  // Client Streaming (клиент отправляет несколько сообщений)
-  rpc AnalyzeTextStream (stream TextChunk) returns (TextAnalysis);
-  
-  // Bidirectional Streaming (оба направления)
-  rpc ChatStream (stream ChatMessage) returns (stream ChatMessage);
 }
 
 // Сообщение для запроса
@@ -35,24 +29,91 @@ message TextResponse {
   map<string, string> metadata = 5;  // словарь
 }
 
-// Для стриминга
-message TextChunk {
-  string content = 1;
+service PlotService {
+  // Обычный RPC для получения графика
+  rpc GeneratePlot (PlotRequest) returns (PlotResponse);
+  
+  // Стриминг для больших графиков
+  rpc StreamPlot (PlotRequest) returns (stream PlotChunk);
+  
+  // Множество графиков
+  rpc GenerateMultiplePlots (MultiPlotRequest) returns (stream PlotResponse);
+}
+
+message PlotRequest {
+  repeated double x_values = 1;
+  repeated double y_values = 2;
+  string title = 3;
+  string x_label = 4;
+  string y_label = 5;
+  string plot_type = 6;      // line, bar, scatter, hist
+  string color = 7;
+  bool grid = 8;
+  int32 width = 9;           // ширина в дюймах
+  int32 height = 10;         // высота в дюймах
+  int32 dpi = 11;           // разрешение
+  string format = 12;        // png, svg, pdf, jpeg
+  map<string, string> options = 13; // дополнительные параметры
+}
+
+message PlotResponse {
+  bytes image_data = 1;      // бинарные данные изображения
+  string format = 2;         // png, svg, pdf, jpeg
+  int64 size_bytes = 3;      // размер в байтах
+  string mime_type = 4;      // image/png, image/svg+xml, etc.
+  int64 generated_at = 5;    // timestamp
+  PlotInfo info = 6;         // метаданные
+}
+
+message PlotChunk {
+  bytes chunk_data = 1;
   int32 chunk_number = 2;
   bool is_last = 3;
+  int64 total_size = 4;
 }
 
-// Анализ текста
-message TextAnalysis {
-  int32 word_count = 1;
-  int32 char_count = 2;
-  int32 sentence_count = 3;
-  map<string, int32> word_frequency = 4;
+message MultiPlotRequest {
+  repeated PlotRequest plots = 1;
+  string layout = 2;         // grid, horizontal, vertical
 }
 
-// Для чата
-message ChatMessage {
-  string user_id = 1;
-  string message = 2;
-  int64 timestamp = 3;
+message PlotInfo {
+  string title = 1;
+  int32 width = 2;
+  int32 height = 3;
+  int32 dpi = 4;
+}
+
+service MassListService {
+
+  rpc ProcessMassList (MassListRequest) returns (MassListResponse);
+
+}
+
+message ElementRange {
+    int32 min = 1;
+    int32 max = 2;
+}
+
+message MassListRequest {
+
+  string spectra_name = 1;
+  float low_percentile = 2;
+  float high_percentile = 3;
+  float rel_error = 4;
+  int32 charge_max = 5;
+  map<string, ElementRange> brutto_dict = 6;
+  string protocole = 7;
+
+}
+
+message MassListResponse {
+
+  bytes image_data = 1;
+  string format = 2;
+  int64 size_bytes = 3;
+  string mime_type = 4;
+  int64 generated_at = 5;
+  PlotInfo info = 6;
+  
 }
