@@ -1,0 +1,35 @@
+# .gitignore
+# Виртуальные окружения
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Файлы зависимостей (если используете poetry)
+# poetry.lock - ДОЛЖЕН быть в Git!
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+
+# Данные
+*.db
+*.sqlite
