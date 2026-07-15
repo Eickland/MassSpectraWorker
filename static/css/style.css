@@ -1,0 +1,140 @@
+/* static/css/style.css */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* Card styling */
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Plot result */
+#plot-result, #spectrum-result {
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#plot-image, #spectrum-image {
+    max-height: 500px;
+    object-fit: contain;
+}
+
+/* Loading spinner */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Form styling */
+.form-label {
+    font-weight: 500;
+}
+
+textarea {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+/* Color picker */
+input[type="color"] {
+    height: 50px;
+    padding: 5px;
+    cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+}
+
+/* static/css/style.css - дополнения */
+
+/* History items */
+.history-item {
+    transition: background-color 0.2s;
+}
+
+.history-item:hover {
+    background-color: #f8f9fa;
+}
+
+/* Progress bar animation */
+.progress-bar {
+    transition: width 0.3s ease;
+}
+
+/* JSON container */
+#json-container pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Form validation */
+.form-control:invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
+}
+
+/* Plot image */
+#plot-image {
+    max-width: 100%;
+    max-height: 600px;
+    object-fit: contain;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Loading spinner */
+#loading-spinner .spinner-border {
+    width: 4rem;
+    height: 4rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .col-md-5, .col-md-7 {
+        padding: 0 10px;
+    }
+    
+    #plot-image {
+        max-height: 400px;
+    }
+}
+
+/* Tooltips */
+[data-tooltip] {
+    position: relative;
+    cursor: help;
+}
+
+[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    background: #333;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+}

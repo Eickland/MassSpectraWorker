@@ -24,7 +24,7 @@ var (
 // GRPCClient - синглтон для gRPC клиента
 type GRPCClient struct {
 	conn   *grpc.ClientConn
-	client pb.PlotServiceClient
+	client pb.MassListServiceClient
 	mu     sync.RWMutex
 }
 
@@ -62,7 +62,7 @@ func newGRPCClient() (*GRPCClient, error) {
 
 	client := &GRPCClient{
 		conn:   conn,
-		client: pb.NewPlotServiceClient(conn),
+		client: pb.NewMassListServiceClient(conn),
 	}
 
 	log.Println("✅ gRPC client connected to localhost:50051")
@@ -70,7 +70,7 @@ func newGRPCClient() (*GRPCClient, error) {
 }
 
 // GetPlotServiceClient - возвращает gRPC клиент для вызовов
-func (c *GRPCClient) GetPlotServiceClient() pb.PlotServiceClient {
+func (c *GRPCClient) GetPlotServiceClient() pb.MassListServiceClient {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.client
@@ -100,8 +100,7 @@ func (c *GRPCClient) IsHealthy() bool {
 	return state == connectivity.Ready
 }
 
-// GeneratePlot - обертка для вызова gRPC метода
-func (c *GRPCClient) GeneratePlot(ctx context.Context, req *pb.PlotRequest) (*pb.PlotResponse, error) {
+func (c *GRPCClient) ProcessMassList(ctx context.Context, req *pb.MassListRequest) (*pb.MassListResponse, error) {
 	c.mu.RLock()
 	client := c.client
 	c.mu.RUnlock()
@@ -113,20 +112,5 @@ func (c *GRPCClient) GeneratePlot(ctx context.Context, req *pb.PlotRequest) (*pb
 		defer cancel()
 	}
 
-	return client.GeneratePlot(ctx, req)
-}
-
-// StreamPlot - обертка для стриминга
-func (c *GRPCClient) StreamPlot(ctx context.Context, req *pb.PlotRequest) (pb.PlotService_StreamPlotClient, error) {
-	c.mu.RLock()
-	client := c.client
-	c.mu.RUnlock()
-
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
-	}
-
-	return client.StreamPlot(ctx, req)
+	return client.ProcessMassList(ctx, req)
 }

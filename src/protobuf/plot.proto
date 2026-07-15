@@ -4,79 +4,6 @@ syntax = "proto3";
 package plot;
 option go_package = "src/protobuf/plot;plot";
 
-
-// Сервис с методами
-service TextService {
-  // Обычный RPC (запрос-ответ)
-  rpc ProcessText (TextRequest) returns (TextResponse);
-  
-}
-
-// Сообщение для запроса
-message TextRequest {
-  string text = 1;
-  string language = 2;
-  bool uppercase = 3;
-  repeated string tags = 4;  // массив строк
-}
-
-// Сообщение для ответа
-message TextResponse {
-  string original_text = 1;
-  string processed_text = 2;
-  int32 length = 3;
-  string language = 4;
-  map<string, string> metadata = 5;  // словарь
-}
-
-service PlotService {
-  // Обычный RPC для получения графика
-  rpc GeneratePlot (PlotRequest) returns (PlotResponse);
-  
-  // Стриминг для больших графиков
-  rpc StreamPlot (PlotRequest) returns (stream PlotChunk);
-  
-  // Множество графиков
-  rpc GenerateMultiplePlots (MultiPlotRequest) returns (stream PlotResponse);
-}
-
-message PlotRequest {
-  repeated double x_values = 1;
-  repeated double y_values = 2;
-  string title = 3;
-  string x_label = 4;
-  string y_label = 5;
-  string plot_type = 6;      // line, bar, scatter, hist
-  string color = 7;
-  bool grid = 8;
-  int32 width = 9;           // ширина в дюймах
-  int32 height = 10;         // высота в дюймах
-  int32 dpi = 11;           // разрешение
-  string format = 12;        // png, svg, pdf, jpeg
-  map<string, string> options = 13; // дополнительные параметры
-}
-
-message PlotResponse {
-  bytes image_data = 1;      // бинарные данные изображения
-  string format = 2;         // png, svg, pdf, jpeg
-  int64 size_bytes = 3;      // размер в байтах
-  string mime_type = 4;      // image/png, image/svg+xml, etc.
-  int64 generated_at = 5;    // timestamp
-  PlotInfo info = 6;         // метаданные
-}
-
-message PlotChunk {
-  bytes chunk_data = 1;
-  int32 chunk_number = 2;
-  bool is_last = 3;
-  int64 total_size = 4;
-}
-
-message MultiPlotRequest {
-  repeated PlotRequest plots = 1;
-  string layout = 2;         // grid, horizontal, vertical
-}
-
 message PlotInfo {
   string title = 1;
   int32 width = 2;
@@ -90,7 +17,7 @@ service MassListService {
 
 }
 
-message ElementRange {
+message BruttoRange {
     int32 min = 1;
     int32 max = 2;
 }
@@ -102,8 +29,14 @@ message MassListRequest {
   float high_percentile = 3;
   float rel_error = 4;
   int32 charge_max = 5;
-  map<string, ElementRange> brutto_dict = 6;
+  map<string, BruttoRange> brutto_dict = 6;
   string protocole = 7;
+  string spectra_path = 8;
+  int32 width = 9;
+  int32 height = 10;
+  int32 dpi = 11;
+  string format = 12;
+  map<string, string> options = 13;
 
 }
 

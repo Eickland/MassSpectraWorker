@@ -1,8 +1,0 @@
-{
-    "protoc": {
-        "path": "protoc",
-        "options": [
-            "--proto_path=."
-        ]
-    }
-}

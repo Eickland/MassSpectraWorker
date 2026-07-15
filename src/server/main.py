@@ -20,20 +20,15 @@ def serve():
             ('grpc.max_receive_message_length', 50 * 1024 * 1024),
         ]
     )
-    
-    # Регистрируем наш сервис
-    pb2_grpc.add_TextServiceServicer_to_server(
-        servicer.TextServiceServicer(), server
-    )
-    
-    pb2_grpc.add_PlotServiceServicer_to_server(
-        servicer.PlotServiceServicer(), server
-    )    
+ 
+
+    pb2_grpc.add_MassListServiceServicer_to_server(
+        servicer.MassListServiceServicer(), server
+    ) 
     
     # Включаем рефлексию
     SERVICE_NAMES = (
-        pb2.DESCRIPTOR.services_by_name['TextService'].full_name,
-        pb2.DESCRIPTOR.services_by_name['PlotService'].full_name,
+        pb2.DESCRIPTOR.services_by_name['MassListService'].full_name,
         reflection.SERVICE_NAME,
     )
     reflection.enable_server_reflection(SERVICE_NAMES, server)    

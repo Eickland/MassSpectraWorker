@@ -27,16 +27,23 @@ func main() {
 	defer grpcClient.Close()
 
 	// 2. Создаем обработчики
-	plotHandler, err := handlers.NewPlotHandler()
+	plotHandler, err := handlers.NewMassListHandler()
 	if err != nil {
 		log.Fatalf("❌ Failed to create handler: %v", err)
 	}
 
+	webHandler := handlers.NewWebHandler()
+
 	// 3. Регистрируем маршруты
-	http.HandleFunc("POST /api/plot", plotHandler.GeneratePlot)
-	http.HandleFunc("POST /api/plot/stream", plotHandler.StreamPlot)
+	http.HandleFunc("POST /api/plot", plotHandler.ProcessMassList)
 	http.HandleFunc("GET /api/health", plotHandler.HealthCheck)
 	http.HandleFunc("GET /api/info", plotHandler.GetInfo)
+
+	// 5. Web маршруты (HTML)
+	http.HandleFunc("GET /mass-list", webHandler.MassListPage)
+	http.HandleFunc("GET /health", webHandler.HealthPage)
+
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
 	// 4. Настраиваем HTTP сервер
 	server := &http.Server{

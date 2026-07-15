@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mass Spectrometry Interface</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-chart-bar text-primary"></i> 
+                Mass List Processing
+            </h1>
+            <p class="text-muted">Generate mass spectra plots from your data</p>
+            <hr>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Левая панель - форма -->
+        <div class="col-md-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-sliders-h"></i> Parameters
+                </div>
+                <div class="card-body">
+                    <form id="mass-list-form">
+                        <!-- Spectra Name -->
+                        <div class="mb-3">
+                            <label for="spectra-name" class="form-label fw-bold">
+                                <i class="fas fa-tag"></i> Spectra Name <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control" id="spectra-name" 
+                                   placeholder="Enter spectra name" required>
+                            <div class="form-text">Example: "Sample_001" or "Test_Spectrum"</div>
+                        </div>
+
+                        <!-- Spectra Path -->
+                        <div class="mb-3">
+                            <label for="spectra-path" class="form-label fw-bold">
+                                <i class="fas fa-folder"></i> Spectra Path
+                            </label>
+                            <input type="text" class="form-control" id="spectra-path" 
+                                   placeholder="/path/to/spectra/data" 
+                                   value="./data/spectra.csv">
+                            <div class="form-text">Path to your spectra data file</div>
+                        </div>
+
+                        <!-- Protocol -->
+                        <div class="mb-3">
+                            <label for="protocol" class="form-label fw-bold">
+                                <i class="fas fa-code-branch"></i> Protocol
+                            </label>
+                            <select class="form-select" id="protocol">
+                                <option value="non_tmds">Non-TMDS</option>
+                                <option value="tmds">TMDS</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+
+                        <!-- Percentiles -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="low-percentile" class="form-label fw-bold">
+                                        <i class="fas fa-arrow-down"></i> Low Percentile
+                                    </label>
+                                    <input type="number" class="form-control" id="low-percentile" 
+                                           value="5" min="0" max="100" step="0.1">
+                                    <div class="form-text">Default: 5</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="high-percentile" class="form-label fw-bold">
+                                        <i class="fas fa-arrow-up"></i> High Percentile
+                                    </label>
+                                    <input type="number" class="form-control" id="high-percentile" 
+                                           value="95" min="0" max="100" step="0.1">
+                                    <div class="form-text">Default: 95</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Relative Error -->
+                        <div class="mb-3">
+                            <label for="rel-error" class="form-label fw-bold">
+                                <i class="fas fa-percent"></i> Relative Error
+                            </label>
+                            <input type="number" class="form-control" id="rel-error" 
+                                   value="0.5" min="0" max="100" step="0.1">
+                            <div class="form-text">Default: 0.5</div>
+                        </div>
+
+                        <!-- Charge Max -->
+                        <div class="mb-3">
+                            <label for="charge-max" class="form-label fw-bold">
+                                <i class="fas fa-bolt"></i> Charge Max
+                            </label>
+                            <input type="number" class="form-control" id="charge-max" 
+                                   value="1" min="1" max="10" step="1">
+                            <div class="form-text">Default: 1</div>
+                        </div>
+
+                        <!-- Brutto Dict -->
+                        <div class="mb-3">
+                            <label for="brutto-dict" class="form-label fw-bold">
+                                <i class="fas fa-table"></i> Brutto Dictionary
+                            </label>
+                            <textarea class="form-control" id="brutto-dict" rows="6" style="font-family: monospace; font-size: 14px;">{
+                                "C": [4, 50],
+                                "H": [4, 80],
+                                "O": [0, 50],
+                                "N": [0, 3],
+                                "C_13": [0, 1],
+                                "S": [0, 3]
+                            }</textarea>
+                            <div class="form-text">JSON format: {"element": [min, max]}</div>
+                        </div>
+
+                        <!-- Plot Settings -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-header">
+                                <i class="fas fa-image"></i> Plot Settings
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="width" class="form-label">Width (in)</label>
+                                            <input type="number" class="form-control" id="width" value="10" min="4" max="20">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="height" class="form-label">Height (in)</label>
+                                            <input type="number" class="form-control" id="height" value="6" min="3" max="15">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="dpi" class="form-label">DPI</label>
+                                    <input type="number" class="form-control" id="dpi" value="100" min="50" max="300" step="50">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="format" class="form-label">Format</label>
+                                    <select class="form-select" id="format">
+                                        <option value="png">PNG</option>
+                                        <option value="svg">SVG</option>
+                                        <option value="pdf">PDF</option>
+                                        <option value="jpeg">JPEG</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" class="btn btn-primary w-100" id="submit-btn">
+                            <i class="fas fa-play"></i> Generate Mass List
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Quick Examples -->
+            <div class="card mt-3 shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <i class="fas fa-lightbulb"></i> Quick Examples
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary btn-sm" onclick="loadExample('example1')">
+                            Example 1: Simple Spectrum
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="loadExample('example2')">
+                            Example 2: High Resolution
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="loadExample('example3')">
+                            Example 3: Custom Brutto
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Правая панель - результат -->
+        <div class="col-md-7">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-image"></i> Result</span>
+                    <span>
+                        <span id="status-badge" class="badge bg-light text-dark">
+                            Ready
+                        </span>
+                    </span>
+                </div>
+                <div class="card-body text-center" id="result-container">
+                    <!-- Loading Spinner -->
+                    <div id="loading-spinner" style="display:none;">
+                        <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3 text-muted">Generating mass list plot...</p>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <!-- No Plot Message -->
+                    <div id="no-plot-message">
+                        <i class="fas fa-chart-bar fa-5x text-muted"></i>
+                        <p class="mt-3 text-muted">
+                            Configure parameters and click "Generate Mass List"
+                        </p>
+                        <small class="text-muted">The plot will appear here</small>
+                    </div>
+
+                    <!-- Plot Image -->
+                    <div id="plot-container" style="display:none;">
+                        <img id="plot-image" src="" alt="Mass List Plot" class="img-fluid">
+                        <div class="mt-3">
+                            <button class="btn btn-success" id="download-btn">
+                                <i class="fas fa-download"></i> Download
+                            </button>
+                            <button class="btn btn-outline-secondary" id="view-json-btn">
+                                <i class="fas fa-code"></i> View JSON
+                            </button>
+                            <span id="plot-info" class="ms-3 text-muted"></span>
+                        </div>
+                    </div>
+
+                    <!-- JSON Response -->
+                    <div id="json-container" style="display:none;" class="text-start">
+                        <div class="card bg-dark text-light">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-code"></i> JSON Response</span>
+                                <button class="btn btn-sm btn-light" onclick="copyJSON()">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <pre id="json-response" style="margin:0; font-size:12px; max-height:400px; overflow:auto;"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History -->
+            <div class="card mt-3 shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <i class="fas fa-history"></i> History
+                </div>
+                <div class="card-body" id="history-container">
+                    <p class="text-muted text-center" id="no-history">No history yet</p>
+                    <div id="history-list" style="display:none;">
+                        <!-- History items will be added here -->
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger mt-2" id="clear-history-btn" style="display:none;">
+                        <i class="fas fa-trash"></i> Clear History
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/mass_list.js"></script>
+
+</body>
+</html>
+
+
