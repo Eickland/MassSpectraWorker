@@ -1,277 +1,302 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mass Spectrometry Interface</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MassSpectraWorker — Mass List</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%2335D0BA'/></svg>">
 </head>
 <body>
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h1 class="mb-4">
-                <i class="fas fa-chart-bar text-primary"></i> 
-                Mass List Processing
-            </h1>
-            <p class="text-muted">Generate mass spectra plots from your data</p>
-            <hr>
-        </div>
+<div class="app">
+
+  <!-- ============ Header ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand__mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <rect x="2"  y="11" width="1.6" height="7"  rx="0.8" fill="#35D0BA"/>
+          <rect x="5"  y="6"  width="1.6" height="12" rx="0.8" fill="#4fd4c0"/>
+          <rect x="8"  y="2"  width="1.6" height="16" rx="0.8" fill="#6E9BFF"/>
+          <rect x="11" y="8"  width="1.6" height="10" rx="0.8" fill="#4fd4c0"/>
+          <rect x="14" y="4"  width="1.6" height="14" rx="0.8" fill="#35D0BA"/>
+          <rect x="17" y="10" width="1.6" height="8"  rx="0.8" fill="#6E9BFF"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand__name">MassSpectra<b>Worker</b></div>
+        <div class="brand__sub">Mass&nbsp;List&nbsp;·&nbsp;FT-ICR</div>
+      </div>
     </div>
 
-    <div class="row">
-        <!-- Левая панель - форма -->
-        <div class="col-md-5">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white">
-                    <i class="fas fa-sliders-h"></i> Parameters
-                </div>
-                <div class="card-body">
-                    <form id="mass-list-form">
-                        <!-- Spectra Name -->
-                        <div class="mb-3">
-                            <label for="spectra-name" class="form-label fw-bold">
-                                <i class="fas fa-tag"></i> Spectra Name <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" class="form-control" id="spectra-name" 
-                                   placeholder="Enter spectra name" required>
-                            <div class="form-text">Example: "Sample_001" or "Test_Spectrum"</div>
-                        </div>
+    <div class="spectrum-strip" id="header-spectrum" aria-hidden="true"></div>
 
-                        <!-- Spectra Path -->
-                        <div class="mb-3">
-                            <label for="spectra-path" class="form-label fw-bold">
-                                <i class="fas fa-folder"></i> Spectra Path
-                            </label>
-                            <input type="text" class="form-control" id="spectra-path" 
-                                   placeholder="/path/to/spectra/data" 
-                                   value="./data/spectra.csv">
-                            <div class="form-text">Path to your spectra data file</div>
-                        </div>
-
-                        <!-- Protocol -->
-                        <div class="mb-3">
-                            <label for="protocol" class="form-label fw-bold">
-                                <i class="fas fa-code-branch"></i> Protocol
-                            </label>
-                            <select class="form-select" id="protocol">
-                                <option value="non_tmds">Non-TMDS</option>
-                                <option value="tmds">TMDS</option>
-                                <option value="custom">Custom</option>
-                            </select>
-                        </div>
-
-                        <!-- Percentiles -->
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="low-percentile" class="form-label fw-bold">
-                                        <i class="fas fa-arrow-down"></i> Low Percentile
-                                    </label>
-                                    <input type="number" class="form-control" id="low-percentile" 
-                                           value="5" min="0" max="100" step="0.1">
-                                    <div class="form-text">Default: 5</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="high-percentile" class="form-label fw-bold">
-                                        <i class="fas fa-arrow-up"></i> High Percentile
-                                    </label>
-                                    <input type="number" class="form-control" id="high-percentile" 
-                                           value="95" min="0" max="100" step="0.1">
-                                    <div class="form-text">Default: 95</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Relative Error -->
-                        <div class="mb-3">
-                            <label for="rel-error" class="form-label fw-bold">
-                                <i class="fas fa-percent"></i> Relative Error
-                            </label>
-                            <input type="number" class="form-control" id="rel-error" 
-                                   value="0.5" min="0" max="100" step="0.1">
-                            <div class="form-text">Default: 0.5</div>
-                        </div>
-
-                        <!-- Charge Max -->
-                        <div class="mb-3">
-                            <label for="charge-max" class="form-label fw-bold">
-                                <i class="fas fa-bolt"></i> Charge Max
-                            </label>
-                            <input type="number" class="form-control" id="charge-max" 
-                                   value="1" min="1" max="10" step="1">
-                            <div class="form-text">Default: 1</div>
-                        </div>
-
-                        <!-- Brutto Dict -->
-                        <div class="mb-3">
-                            <label for="brutto-dict" class="form-label fw-bold">
-                                <i class="fas fa-table"></i> Brutto Dictionary
-                            </label>
-                            <textarea class="form-control" id="brutto-dict" rows="6" style="font-family: monospace; font-size: 14px;">{
-                                "C": [4, 50],
-                                "H": [4, 80],
-                                "O": [0, 50],
-                                "N": [0, 3],
-                                "C_13": [0, 1],
-                                "S": [0, 3]
-                            }</textarea>
-                            <div class="form-text">JSON format: {"element": [min, max]}</div>
-                        </div>
-
-                        <!-- Plot Settings -->
-                        <div class="card bg-light mb-3">
-                            <div class="card-header">
-                                <i class="fas fa-image"></i> Plot Settings
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label for="width" class="form-label">Width (in)</label>
-                                            <input type="number" class="form-control" id="width" value="10" min="4" max="20">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-3">
-                                            <label for="height" class="form-label">Height (in)</label>
-                                            <input type="number" class="form-control" id="height" value="6" min="3" max="15">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="dpi" class="form-label">DPI</label>
-                                    <input type="number" class="form-control" id="dpi" value="100" min="50" max="300" step="50">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="format" class="form-label">Format</label>
-                                    <select class="form-select" id="format">
-                                        <option value="png">PNG</option>
-                                        <option value="svg">SVG</option>
-                                        <option value="pdf">PDF</option>
-                                        <option value="jpeg">JPEG</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Submit Button -->
-                        <button type="submit" class="btn btn-primary w-100" id="submit-btn">
-                            <i class="fas fa-play"></i> Generate Mass List
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Quick Examples -->
-            <div class="card mt-3 shadow-sm">
-                <div class="card-header bg-secondary text-white">
-                    <i class="fas fa-lightbulb"></i> Quick Examples
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-outline-primary btn-sm" onclick="loadExample('example1')">
-                            Example 1: Simple Spectrum
-                        </button>
-                        <button class="btn btn-outline-primary btn-sm" onclick="loadExample('example2')">
-                            Example 2: High Resolution
-                        </button>
-                        <button class="btn btn-outline-primary btn-sm" onclick="loadExample('example3')">
-                            Example 3: Custom Brutto
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Правая панель - результат -->
-        <div class="col-md-7">
-            <div class="card shadow-sm">
-                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-image"></i> Result</span>
-                    <span>
-                        <span id="status-badge" class="badge bg-light text-dark">
-                            Ready
-                        </span>
-                    </span>
-                </div>
-                <div class="card-body text-center" id="result-container">
-                    <!-- Loading Spinner -->
-                    <div id="loading-spinner" style="display:none;">
-                        <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem;">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-3 text-muted">Generating mass list plot...</p>
-                        <div class="progress" style="height: 5px;">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                                 role="progressbar" style="width: 100%"></div>
-                        </div>
-                    </div>
-
-                    <!-- No Plot Message -->
-                    <div id="no-plot-message">
-                        <i class="fas fa-chart-bar fa-5x text-muted"></i>
-                        <p class="mt-3 text-muted">
-                            Configure parameters and click "Generate Mass List"
-                        </p>
-                        <small class="text-muted">The plot will appear here</small>
-                    </div>
-
-                    <!-- Plot Image -->
-                    <div id="plot-container" style="display:none;">
-                        <img id="plot-image" src="" alt="Mass List Plot" class="img-fluid">
-                        <div class="mt-3">
-                            <button class="btn btn-success" id="download-btn">
-                                <i class="fas fa-download"></i> Download
-                            </button>
-                            <button class="btn btn-outline-secondary" id="view-json-btn">
-                                <i class="fas fa-code"></i> View JSON
-                            </button>
-                            <span id="plot-info" class="ms-3 text-muted"></span>
-                        </div>
-                    </div>
-
-                    <!-- JSON Response -->
-                    <div id="json-container" style="display:none;" class="text-start">
-                        <div class="card bg-dark text-light">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <span><i class="fas fa-code"></i> JSON Response</span>
-                                <button class="btn btn-sm btn-light" onclick="copyJSON()">
-                                    <i class="fas fa-copy"></i> Copy
-                                </button>
-                            </div>
-                            <div class="card-body">
-                                <pre id="json-response" style="margin:0; font-size:12px; max-height:400px; overflow:auto;"></pre>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- History -->
-            <div class="card mt-3 shadow-sm">
-                <div class="card-header bg-info text-white">
-                    <i class="fas fa-history"></i> History
-                </div>
-                <div class="card-body" id="history-container">
-                    <p class="text-muted text-center" id="no-history">No history yet</p>
-                    <div id="history-list" style="display:none;">
-                        <!-- History items will be added here -->
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger mt-2" id="clear-history-btn" style="display:none;">
-                        <i class="fas fa-trash"></i> Clear History
-                    </button>
-                </div>
-            </div>
-        </div>
+    <div class="status" id="status" data-state="ready">
+      <span class="dot"></span>
+      <span id="status-text">Готов</span>
     </div>
+  </header>
+
+  <!-- ============ Workspace ============ -->
+  <div class="workspace">
+
+    <!-- ---------- Parameters ---------- -->
+    <section class="pane pane--params">
+      <form id="mass-list-form">
+        <div class="params-scroll">
+
+          <!-- Source -->
+          <div class="section">
+            <div class="section__head">
+              <span class="idx">01</span>
+              <span class="eyebrow">Источник</span>
+            </div>
+
+            <div class="field">
+              <label class="lbl" for="spectra-name">Имя спектра <span class="req">*</span></label>
+              <input type="text" id="spectra-name" placeholder="Sample_001" required autocomplete="off">
+            </div>
+
+            <div class="field">
+              <label class="lbl" for="spectra-path">Путь к данным</label>
+              <input type="text" id="spectra-path" placeholder="/path/to/spectra.mzML" value="./data/spectra.csv" autocomplete="off">
+              <div class="field__note">Путь к файлу спектра на сервере обработки.</div>
+            </div>
+
+            <div class="field">
+              <label class="lbl" for="protocol">Протокол</label>
+              <select id="protocol">
+                <option value="non_tmds">Non-TMDS</option>
+                <option value="tmds">TMDS</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+
+            <div class="field__row">
+              <div class="field">
+                <label class="lbl" for="low-percentile">Ниж. перцентиль <span class="hint">%</span></label>
+                <input type="number" id="low-percentile" value="99.4" min="0" max="100" step="0.0001">
+              </div>
+              <div class="field">
+                <label class="lbl" for="high-percentile">Верх. перцентиль <span class="hint">%</span></label>
+                <input type="number" id="high-percentile" value="99.95" min="0" max="100" step="0.0001">
+              </div>
+            </div>
+          </div>
+
+          <!-- Assignment -->
+          <div class="section">
+            <div class="section__head">
+              <span class="idx">02</span>
+              <span class="eyebrow">Приписывание формул</span>
+            </div>
+
+            <div class="field__row">
+              <div class="field">
+                <label class="lbl" for="rel-error">Отн. ошибка <span class="hint">ppm</span></label>
+                <input type="number" id="rel-error" value="0.5" min="0" max="100" step="0.1">
+              </div>
+              <div class="field">
+                <label class="lbl" for="charge-max">Макс. заряд <span class="hint">z</span></label>
+                <input type="number" id="charge-max" value="1" min="1" max="10" step="1">
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="lbl" for="brutto-dict">
+                Брутто-словарь
+                <span class="hint">JSON</span>
+              </label>
+              <textarea id="brutto-dict" spellcheck="false" rows="7">{
+  "C": [4, 50],
+  "H": [4, 80],
+  "O": [0, 50],
+  "N": [0, 3],
+  "C_13": [0, 1],
+  "S": [0, 3]
+}</textarea>
+              <div class="field__note">Диапазоны атомов: <code>{"элемент": [min, max]}</code></div>
+            </div>
+          </div>
+
+          <!-- Output -->
+          <div class="section">
+            <div class="section__head">
+              <span class="idx">03</span>
+              <span class="eyebrow">Вывод графика</span>
+            </div>
+
+            <div class="subgrid">
+              <div class="field">
+                <label class="lbl" for="width">Ширина <span class="hint">in</span></label>
+                <input type="number" id="width" value="10" min="4" max="20">
+              </div>
+              <div class="field">
+                <label class="lbl" for="height">Высота <span class="hint">in</span></label>
+                <input type="number" id="height" value="6" min="3" max="15">
+              </div>
+              <div class="field">
+                <label class="lbl" for="dpi">DPI</label>
+                <input type="number" id="dpi" value="100" min="50" max="300" step="50">
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="lbl" for="format">Формат</label>
+              <select id="format">
+                <option value="png">PNG</option>
+                <option value="svg">SVG</option>
+                <option value="pdf">PDF</option>
+                <option value="jpeg">JPEG</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Examples -->
+          <div class="section">
+            <div class="section__head">
+              <span class="eyebrow">Пресеты</span>
+            </div>
+            <div class="chips">
+              <button type="button" class="chip" data-example="example1">
+                <span class="chip__num">01</span>
+                <span class="chip__body">
+                  <span class="chip__title">Базовый спектр</span>
+                  <span class="chip__meta">C4–50 · 0.5 ppm · png</span>
+                </span>
+                <span class="chip__arrow">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
+              </button>
+              <button type="button" class="chip" data-example="example2">
+                <span class="chip__num">02</span>
+                <span class="chip__body">
+                  <span class="chip__title">Высокое разрешение</span>
+                  <span class="chip__meta">TMDS · 0.1 ppm · 150 dpi</span>
+                </span>
+                <span class="chip__arrow">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
+              </button>
+              <button type="button" class="chip" data-example="example3">
+                <span class="chip__num">03</span>
+                <span class="chip__body">
+                  <span class="chip__title">Свой брутто-набор</span>
+                  <span class="chip__meta">C1–20 · 0.3 ppm · svg</span>
+                </span>
+                <span class="chip__arrow">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <!-- History -->
+          <div class="section">
+            <div class="section__head history__head">
+              <span class="eyebrow">История</span>
+              <button type="button" class="btn btn--danger hidden" id="clear-history">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Очистить
+              </button>
+            </div>
+            <div class="empty-note" id="history-empty">Пока пусто — запусков ещё не было.</div>
+            <div class="history-list hidden" id="history-list"></div>
+          </div>
+
+        </div>
+
+        <!-- Sticky action -->
+        <div class="actionbar">
+          <button type="submit" class="btn btn--primary btn--block" id="submit-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+            <span id="submit-label">Сгенерировать масс-лист</span>
+          </button>
+          <span class="kbd-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> — быстрый запуск</span>
+        </div>
+      </form>
+    </section>
+
+    <!-- ---------- Result ---------- -->
+    <section class="pane pane--result">
+      <div class="result__bar">
+        <span class="result__title">Результат</span>
+        <span class="result__meta" id="result-meta"></span>
+      </div>
+
+      <div class="viewport" id="viewport">
+
+        <!-- Empty state -->
+        <div class="vp-state" id="state-empty">
+          <div class="vp-state__spectrum" id="empty-spectrum"></div>
+          <p class="vp-state__title">График появится здесь</p>
+          <p class="vp-state__desc">Настройте параметры слева и запустите генерацию, чтобы построить масс-лист.</p>
+        </div>
+
+        <!-- Loading -->
+        <div class="vp-loading hidden" id="state-loading">
+          <div class="scanner"></div>
+          <div class="vp-loading__label">Обработка спектра…</div>
+        </div>
+
+        <!-- Image -->
+        <div class="vp-image hidden" id="state-image">
+          <img id="plot-image" src="" alt="Масс-лист">
+        </div>
+
+        <!-- Error -->
+        <div class="vp-error hidden" id="state-error">
+          <div class="vp-error__icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <p class="vp-error__msg" id="error-msg">Что-то пошло не так</p>
+          <p class="vp-error__hint" id="error-hint"></p>
+          <button type="button" class="btn btn--ghost btn--sm" id="error-retry">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Повторить
+          </button>
+        </div>
+      </div>
+
+      <!-- Toolbar (only when image ready) -->
+      <div class="result__tools hidden" id="result-tools">
+        <button type="button" class="btn btn--primary btn--sm" id="download-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Скачать
+        </button>
+        <button type="button" class="btn btn--ghost btn--sm" id="toggle-json">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          JSON
+        </button>
+        <span class="spacer"></span>
+      </div>
+
+      <!-- JSON drawer -->
+      <div class="json-drawer hidden" id="json-drawer">
+        <div class="json-drawer__head">
+          <span class="json-drawer__title">Ответ сервера</span>
+          <span class="spacer" style="flex:1"></span>
+          <button type="button" class="btn btn--ghost btn--sm" id="copy-json">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Копировать
+          </button>
+        </div>
+        <pre id="json-content"></pre>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  <span id="toast-text">Готово</span>
 </div>
 
 <script src="/static/js/mass_list.js"></script>
-
 </body>
 </html>
-
-

@@ -20,7 +20,7 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
         ms_list = raw_data_process.extract_mass_list_percentile(request.spectra_path, low_percentile=request.low_percentile,high_percentile=request.high_percentile)
         ms_spectra = assign_module.process_non_tmds(ms_list, request.spectra_name)
 
-        fig = plot_service.plot_preview(ms_spectra=ms_spectra,dpi=request.dpi)
+        fig = plot_service.plot_preview(ms_spectra=ms_spectra,dpi=request.dpi, width=request.width,height=request.height)
         fmt = plot_service.format_map.get(request.format, 'png')
         image_bytes = plot_service._fig_to_bytes(fig, format=fmt, dpi=request.dpi)
         plt.close(fig)
