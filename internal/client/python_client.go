@@ -1,5 +1,4 @@
-// pkg/grpcclient/client.go
-package grpcclient
+package client
 
 import (
 	"context"

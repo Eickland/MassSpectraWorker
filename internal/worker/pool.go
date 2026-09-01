@@ -1,34 +1,42 @@
 package worker
 
 import (
+	"MassSpectraWorker/internal/client"
 	"MassSpectraWorker/internal/model"
 	"MassSpectraWorker/internal/repository"
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+
+	pb "MassSpectraWorker/src/protobuf"
 )
 
 type WorkerPool struct {
-	repo    *repository.JobRepository
-	workers int
-	jobs    chan uuid.UUID
-	wg      sync.WaitGroup
-	ctx     context.Context
-	cancel  context.CancelFunc
+	repo         *repository.JobRepository
+	pythonClient *client.GRPCClient
+	workers      int
+	jobs         chan uuid.UUID
+	wg           sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
-func NewWorkerPool(repo *repository.JobRepository, workers int) *WorkerPool {
+func NewWorkerPool(repo *repository.JobRepository,
+	pythonClient *client.GRPCClient, workers int) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &WorkerPool{
-		repo:    repo,
-		workers: workers,
-		jobs:    make(chan uuid.UUID, 100),
-		ctx:     ctx,
-		cancel:  cancel,
+		repo:         repo,
+		pythonClient: pythonClient,
+		workers:      workers,
+		jobs:         make(chan uuid.UUID, 100),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 }
 
@@ -122,11 +130,11 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 		var resultPath, errMsg *string
 		if err != nil {
 			status = "failed"
-			errMsg = stringPtr(err.Error())
+			errMsg = new(err.Error())
 			failedItems++
 		} else {
 			status = "done"
-			resultPath = stringPtr(fmt.Sprintf("/results/%s/%s.png", jobID, item.SpectraName))
+			resultPath = new(fmt.Sprintf("/results/%s/%s.png", jobID, item.SpectraName))
 			doneItems++
 		}
 
@@ -158,24 +166,52 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 
 // processItem - обработка одного элемента (спектра)
 func (p *WorkerPool) processItem(item *model.JobItem) error {
-	// Здесь ваша логика обработки спектра
-	// Например, вызов Python-скрипта или Go-библиотеки
-
 	log.Printf("Processing item %s (%s)", item.ID, item.SpectraName)
 
-	// Имитация работы
-	time.Sleep(2 * time.Second)
+	// 1. Получаем параметры задачи (через JOIN)
+	job, err := p.repo.GetJobByID(item.JobID)
+	if err != nil {
+		return fmt.Errorf("failed to get job: %w", err)
+	}
 
-	// В реальном проекте здесь будет:
-	// 1. Чтение спектра из SpectraPath
-	// 2. Обработка с параметрами из Job (через join)
-	// 3. Сохранение результата в ResultPath
-	// 4. Возврат ошибки если что-то пошло не так
+	// 2. Формируем запрос к Python
+	req := &pb.MassListRequest{
+		SpectraPath:    item.SpectraPath,
+		SpectraName:    item.SpectraName,
+		LowPercentile:  job.LowPercentile, // параметры из задачи
+		HighPercentile: job.HighPercentile,
+		Dpi:            300,
+		Width:          800,
+		Height:         600,
+		Format:         "png",
+	}
 
-	return nil // или возвращаем ошибку
+	// 3. Вызываем Python-сервис
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	resp, err := p.pythonClient.ProcessMassList(ctx, req)
+	if err != nil {
+		return fmt.Errorf("python processing failed: %w", err)
+	}
+
+	// 4. Сохраняем результат
+	resultPath := fmt.Sprintf("/results/%s/%s.png", item.JobID, item.SpectraName)
+	if err := p.saveResult(resultPath, resp.ImageData); err != nil {
+		return fmt.Errorf("failed to save result: %w", err)
+	}
+
+	log.Printf("Item %s processed successfully, size: %d bytes", item.ID, resp.SizeBytes)
+	return nil
 }
 
-// Вспомогательные функции
-func stringPtr(s string) *string {
-	return &s
+// saveResult - сохраняет бинарные данные в файл
+func (p *WorkerPool) saveResult(path string, data []byte) error {
+	// Создаём директорию если её нет
+	dir := path[:len(path)-len("/"+path[strings.LastIndex(path, "/")+1:])]
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0644)
 }

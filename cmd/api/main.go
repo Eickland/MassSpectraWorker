@@ -67,13 +67,15 @@ func main() {
 
 	// 3. Инициализация репозитория, сервиса, хендлера для batch
 	repo := repository.NewJobRepository(db)
-	service := service.NewBatchService(repo)
+
+	pool := worker.NewWorkerPool(repo, grpcClient, 5) // 5 воркеров
+	pool.Start()
+	defer pool.Stop()
+
+	service := service.NewBatchService(repo, pool)
 	batchHandler := handlers.NewBatchHandler(service)
 
 	// 4. Запуск воркер-пула
-	pool := worker.NewWorkerPool(repo, 5) // 5 воркеров
-	pool.Start()
-	defer pool.Stop()
 
 	// ============================================
 	// 5. ЕДИНЫЙ РОУТЕР НА БАЗЕ CHI
