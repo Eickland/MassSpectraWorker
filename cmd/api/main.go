@@ -39,6 +39,11 @@ func main() {
 	http.HandleFunc("GET /api/health", plotHandler.HealthCheck)
 	http.HandleFunc("GET /api/info", plotHandler.GetInfo)
 
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Перенаправление на страницу масс-листа или главную
+		http.Redirect(w, r, "/mass-list", http.StatusFound)
+	})
+
 	// 5. Web маршруты (HTML)
 	http.HandleFunc("GET /mass-list", webHandler.MassListPage)
 	http.HandleFunc("GET /health", webHandler.HealthPage)

@@ -1,0 +1,6 @@
+grpcio-reflection
+grpcio-tools
+matplotlib
+git+https://github.com/Eickland/HumSpectra.git
+pyopenms
+statsmodels
