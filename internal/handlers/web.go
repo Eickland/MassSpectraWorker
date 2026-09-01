@@ -24,7 +24,7 @@ type PageData struct {
 
 // NewWebHandler - создает новый WebHandler
 func NewWebHandler() *WebHandler {
-
+	// Загружаем все шаблоны
 	tmpl := template.Must(template.ParseGlob("templates/*.html"))
 
 	return &WebHandler{
@@ -36,48 +36,61 @@ func NewWebHandler() *WebHandler {
 	}
 }
 
-// render - рендерит HTML страницу
-func (h *WebHandler) render(w http.ResponseWriter, name string, data interface{}) {
-	// Добавляем общие данные
-	if pageData, ok := data.(*PageData); ok {
-		if pageData.Data == nil {
-			pageData.Data = make(map[string]interface{})
-		}
-		pageData.Data["Version"] = h.data["Version"]
-		pageData.Data["Year"] = h.data["Year"]
+// render - универсальный метод рендеринга
+func (h *WebHandler) render(w http.ResponseWriter, templateName string, title string, extraData map[string]interface{}) {
+	// Базовые данные
+	data := map[string]interface{}{
+		"Title":   title,
+		"Version": h.data["Version"],
+		"Year":    h.data["Year"],
+	}
+
+	// Добавляем дополнительные данные
+	for key, value := range extraData {
+		data[key] = value
 	}
 
 	// Проверяем существование шаблона
-	if h.templates.Lookup(name) == nil {
-		http.Error(w, "Template not found", http.StatusNotFound)
+	if h.templates.Lookup(templateName) == nil {
+		http.Error(w, "Template '"+templateName+"' not found", http.StatusNotFound)
 		return
 	}
 
 	// Рендерим шаблон
-	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
+	if err := h.templates.ExecuteTemplate(w, templateName, data); err != nil {
 		http.Error(w, "Failed to render template: "+err.Error(), http.StatusInternalServerError)
-		return
 	}
 }
 
 // ============================================================
-// HANDLERS
+// HANDLERS - все используют универсальный render()
 // ============================================================
+
+// IndexPage - главная страница
+func (h *WebHandler) IndexPage(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "index.html", "Главная", map[string]interface{}{
+		"Message": "Добро пожаловать на главную страницу!",
+	})
+}
+
+// MassListPage - страница обработки масс-листа
+func (h *WebHandler) MassListPage(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "mass_list.html", "Обработка масс-листа", map[string]interface{}{
+		"Description": "Загрузите файл с массами для обработки",
+	})
+}
+
+// BatchMassListPage - страница пакетной обработки
+func (h *WebHandler) BatchMassListPage(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "batch_mass_list.html", "Пакетная обработка", map[string]interface{}{
+		"Description": "Загрузите несколько файлов для пакетной обработки",
+	})
+}
 
 // HealthPage - страница здоровья
 func (h *WebHandler) HealthPage(w http.ResponseWriter, r *http.Request) {
-	data := &PageData{
-		Title: "Health Check",
-	}
-	h.render(w, "base.html", data)
-}
-
-func (h *WebHandler) MassListPage(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"Title": "Mass List Processing",
-	}
-
-	if err := h.templates.ExecuteTemplate(w, "mass_list.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	h.render(w, "health.html", "Health Check", map[string]interface{}{
+		"Status": "OK",
+		"Uptime": time.Now().Format("2006-01-02 15:04:05"),
+	})
 }
