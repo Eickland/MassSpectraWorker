@@ -501,6 +501,110 @@ clearHistoryBtn.addEventListener('click', () => {
 });
 
 /* ============================================================
+   Server-side folder browser
+   (native OS file/folder dialogs can't hand back a filesystem
+   path — browsers deliberately hide it — so instead this asks the
+   Go server, via GET /api/browse, to list directories on the
+   machine the SERVER runs on. On WSL that naturally includes
+   /mnt/c, /mnt/d, etc., so a folder on the Windows side of the
+   same machine is reachable; a folder on a genuinely different
+   device with no shared mount is not — see the field note.)
+   ============================================================ */
+const browseOpenBtn   = $('browse-open-btn');
+const browseModal     = $('browse-modal');
+const browseCloseBtn  = $('browse-close');
+const browseCancelBtn = $('browse-cancel');
+const browseSelectBtn = $('browse-select');
+const browseUpBtn     = $('browse-up');
+const browseCurrentPathEl = $('browse-current-path');
+const browseRootsEl   = $('browse-roots');
+const browseListEl    = $('browse-list');
+const browseErrorEl   = $('browse-error');
+
+let browseCurrentPath = null;
+let browseParentPath = null;
+
+function openBrowseModal() {
+  browseModal.classList.remove('hidden');
+  loadBrowse($('folder-path').value.trim());
+}
+
+function closeBrowseModal() {
+  browseModal.classList.add('hidden');
+}
+
+async function loadBrowse(path) {
+  browseErrorEl.classList.add('hidden');
+  try {
+    const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : '/api/browse';
+    const res = await fetch(url);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    browseCurrentPath = data.path;
+    browseParentPath = data.parent || null;
+    browseCurrentPathEl.textContent = data.path;
+    browseUpBtn.disabled = !browseParentPath;
+    renderBrowseRoots(data.roots || []);
+    renderBrowseList(data.entries || []);
+  } catch (err) {
+    browseErrorEl.textContent = 'Не удалось открыть папку: ' + err.message;
+    browseErrorEl.classList.remove('hidden');
+  }
+}
+
+function renderBrowseRoots(roots) {
+  if (!roots.length) {
+    browseRootsEl.innerHTML = '';
+    return;
+  }
+  browseRootsEl.innerHTML = roots.map((r) => `
+    <button type="button" class="browse-root-item" data-path="${escapeHtml(r.path)}">${escapeHtml(r.name)}</button>
+  `).join('');
+  browseRootsEl.querySelectorAll('.browse-root-item').forEach((btn) => {
+    btn.addEventListener('click', () => loadBrowse(btn.dataset.path));
+  });
+}
+
+function renderBrowseList(entries) {
+  if (!entries.length) {
+    browseListEl.innerHTML = '<div class="browse-empty">Вложенных папок нет</div>';
+    return;
+  }
+  browseListEl.innerHTML = entries.map((e) => `
+    <button type="button" class="browse-item" data-path="${escapeHtml(e.path)}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span>${escapeHtml(e.name)}</span>
+    </button>
+  `).join('');
+  browseListEl.querySelectorAll('.browse-item').forEach((btn) => {
+    btn.addEventListener('click', () => loadBrowse(btn.dataset.path));
+  });
+}
+
+browseOpenBtn.addEventListener('click', openBrowseModal);
+browseCloseBtn.addEventListener('click', closeBrowseModal);
+browseCancelBtn.addEventListener('click', closeBrowseModal);
+browseUpBtn.addEventListener('click', () => {
+  if (browseParentPath) loadBrowse(browseParentPath);
+});
+browseSelectBtn.addEventListener('click', () => {
+  if (browseCurrentPath) {
+    $('folder-path').value = browseCurrentPath;
+    showToast('Папка выбрана');
+  }
+  closeBrowseModal();
+});
+browseModal.addEventListener('click', (e) => {
+  if (e.target === browseModal) closeBrowseModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !browseModal.classList.contains('hidden')) closeBrowseModal();
+});
+
+/* ============================================================
    Decorative empty-state spectrum bars (same motif as mass_list)
    ============================================================ */
 function buildSpectrum(el, count, maxH, minH) {

@@ -19,7 +19,7 @@ CREATE TABLE batch_job_items (
   result_path   TEXT,          -- куда записана картинка
   error         TEXT,
   file_hash     TEXT,          -- см. раздел про кэш
-  started_at    TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ,
   finished_at   TIMESTAMPTZ
 );
 

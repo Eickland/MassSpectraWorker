@@ -6,6 +6,7 @@ import (
 	"MassSpectraWorker/internal/worker"
 	"fmt"
 	"io/fs"
+	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -73,6 +74,11 @@ func (s *BatchService) CreateJobFromFolder(folderPath string, params model.JobPa
 	if err := s.repo.CreateJobItems(items); err != nil {
 		return nil, err
 	}
+
+	// ✅ КЛЮЧЕВОЙ МОМЕНТ: Отправляем задачу в воркер!
+	log.Printf("📤 Submitting job %s to worker pool", job.ID)
+	s.pool.Submit(job.ID)
+	log.Printf("✅ Job %s submitted to worker pool", job.ID)
 
 	return job, nil
 }

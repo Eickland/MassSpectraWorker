@@ -96,7 +96,8 @@ func main() {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/mass_list", http.StatusFound)
 	})
-
+	browseHandler := handlers.NewBrowseHandler()
+	r.Get("/api/browse", browseHandler.Browse)
 	// === Web маршруты (HTML) ===
 	r.Get("/index", webHandler.IndexPage)
 	r.Get("/batch_mass_list", webHandler.BatchMassListPage)

@@ -168,6 +168,14 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 func (p *WorkerPool) processItem(item *model.JobItem) error {
 	log.Printf("Processing item %s (%s)", item.ID, item.SpectraName)
 
+	cancelled, err := p.repo.IsJobCancelled(item.JobID)
+	if err != nil {
+		return err
+	}
+	if cancelled {
+		return fmt.Errorf("job cancelled before processing")
+	}
+
 	// 1. Получаем параметры задачи (через JOIN)
 	job, err := p.repo.GetJobByID(item.JobID)
 	if err != nil {
@@ -178,14 +186,15 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 	req := &pb.MassListRequest{
 		SpectraPath:    item.SpectraPath,
 		SpectraName:    item.SpectraName,
-		LowPercentile:  job.LowPercentile, // параметры из задачи
-		HighPercentile: job.HighPercentile,
-		Dpi:            300,
-		Width:          800,
-		Height:         600,
-		Format:         "png",
+		LowPercentile:  job.Params.LowPercentile,
+		HighPercentile: job.Params.HighPercentile,
+		RelError:       job.Params.RelError,
+		Dpi:            job.Params.Dpi,
+		Width:          job.Params.Width,
+		Height:         job.Params.Height,
+		Format:         job.Params.OutputFormat,
 	}
-
+	log.Printf("Item %s name", req.SpectraName)
 	// 3. Вызываем Python-сервис
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

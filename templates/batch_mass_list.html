@@ -163,6 +163,78 @@
 
     .empty-note { font-size: 12px; color: var(--text-dim); }
 
+    /* ---- Folder path + server-side browse button ---- */
+    .input-with-btn { display: flex; gap: 8px; }
+    .input-with-btn input { flex: 1; min-width: 0; }
+    .input-with-btn .btn { flex: 0 0 auto; }
+
+    /* ---- Server folder browser modal ---- */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(5,6,9,0.6);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      width: 100%; max-width: 620px; max-height: 78vh;
+      display: flex; flex-direction: column;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .modal__head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    .modal__title { font-family: var(--font-display); font-size: 13.5px; font-weight: 500; color: var(--text); }
+    .modal__path-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+    }
+    .modal__path-bar code {
+      flex: 1; min-width: 0;
+      font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted);
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 5px; padding: 5px 9px;
+      overflow-x: auto; white-space: nowrap;
+    }
+    .modal__body { display: flex; flex: 1; min-height: 260px; overflow: hidden; }
+    .modal__roots {
+      width: 150px; flex: 0 0 auto; overflow-y: auto;
+      border-right: 1px solid var(--border); background: var(--surface-2);
+      padding: 8px;
+    }
+    .browse-root-item {
+      display: block; width: 100%; text-align: left;
+      background: transparent; border: none; color: var(--text-muted);
+      font-size: 11.5px; font-family: var(--font-mono);
+      padding: 7px 8px; border-radius: 6px; cursor: pointer;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .browse-root-item:hover { background: var(--surface-3); color: var(--text); }
+    .modal__list { flex: 1; overflow-y: auto; padding: 6px; }
+    .browse-item {
+      display: flex; align-items: center; gap: 9px; width: 100%;
+      text-align: left; background: transparent; border: none;
+      color: var(--text); font-size: 12.5px; font-family: var(--font-body);
+      padding: 8px 10px; border-radius: 7px; cursor: pointer;
+    }
+    .browse-item:hover { background: var(--surface-2); }
+    .browse-item svg { flex: 0 0 auto; color: var(--accent-soft); }
+    .browse-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .browse-empty { padding: 24px; text-align: center; font-size: 12px; color: var(--text-dim); }
+    .modal__error {
+      font-size: 11.5px; color: var(--danger);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;
+    }
+    .modal__foot {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+
     @media (max-width: 560px) {
       .items-table-head, .items-row { grid-template-columns: 1fr 70px; }
       .items-table-head span:nth-child(3), .items-row .item-status-cell { display: none; }
@@ -227,8 +299,14 @@
             <div class="mode-pane" id="mode-pane-folder">
               <div class="field">
                 <label class="lbl" for="folder-path">Путь к папке <span class="req">*</span></label>
-                <input type="text" id="folder-path" placeholder="./data/spectra_batch" value="./data/spectra_batch" autocomplete="off">
-                <div class="field__note">Сервер рекурсивно найдёт файлы с расширениями <code>.csv</code>, <code>.mzML</code>, <code>.mzXML</code>, <code>.raw</code>, а также папки <code>.d</code>.</div>
+                <div class="input-with-btn">
+                  <input type="text" id="folder-path" placeholder="./data/spectra_batch" value="./data/spectra_batch" autocomplete="off">
+                  <button type="button" class="btn btn--ghost btn--sm" id="browse-open-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    Обзор…
+                  </button>
+                </div>
+                <div class="field__note">Сервер рекурсивно найдёт файлы с расширениями <code>.csv</code>, <code>.mzML</code>, <code>.mzXML</code>, <code>.raw</code>, а также папки <code>.d</code>. Кнопка «Обзор…» показывает папки на той машине, где запущен сервер (в WSL это включает <code>/mnt/c</code> и т.п.) — не на компьютере, где открыт браузер.</div>
               </div>
             </div>
 
@@ -425,6 +503,34 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
 <div class="toast" id="toast">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
   <span id="toast-text">Готово</span>
+</div>
+
+<!-- Server-side folder browser -->
+<div class="modal-overlay hidden" id="browse-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <span class="modal__title">Выбор папки на сервере</span>
+      <button type="button" class="btn btn--ghost btn--sm" id="browse-close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal__path-bar">
+      <button type="button" class="btn btn--ghost btn--sm" id="browse-up" title="Вверх" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+      <code id="browse-current-path">—</code>
+    </div>
+    <div class="modal__body">
+      <div class="modal__roots" id="browse-roots"></div>
+      <div class="modal__list" id="browse-list"></div>
+    </div>
+    <div class="modal__foot">
+      <span class="modal__error hidden" id="browse-error"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button type="button" class="btn btn--ghost btn--sm" id="browse-cancel">Отмена</button>
+      <button type="button" class="btn btn--primary btn--sm" id="browse-select">Выбрать эту папку</button>
+    </div>
+  </div>
 </div>
 
 <script src="/static/js/batch_mass_list.js"></script>
