@@ -34,12 +34,11 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
                 logging.error(error_msg)
                 context.set_code(grpc.StatusCode.NOT_FOUND)
                 context.set_details(error_msg)
-                return pb2.MassListResponse()
-                           
+                return pb2.MassListResponse()           
             ms_list = raw_data_process.extract_mass_list_percentile(request.spectra_path, low_percentile=request.low_percentile,high_percentile=request.high_percentile)
             
             if ms_list is None or len(ms_list) == 0:
-                error_msg = f"No data extracted from {request.spectra_path} (empty mass list)"
+                error_msg = f"No data extracted from {request.spectra_path} (empty mass list), params: {request.low_percentile}, {request.high_percentile}"
                 logging.error(error_msg)
                 context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
                 context.set_details(error_msg)

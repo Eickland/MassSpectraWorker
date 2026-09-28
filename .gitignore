@@ -34,3 +34,5 @@ Thumbs.db
 *.db
 *.sqlite
 
+SQL_config.txt
+
