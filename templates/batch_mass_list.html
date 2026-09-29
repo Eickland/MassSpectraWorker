@@ -329,8 +329,12 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
 
             <div class="field__row">
               <div class="field">
-                <label class="lbl" for="percentile">Перцентиль <span class="hint">%, целое</span></label>
-                <input type="number" id="percentile" value="99" min="0" max="100" step="1">
+                <label class="lbl" for="low_percentile">Нижний перцентиль <span class="hint">%, float</span></label>
+                <input type="number" id="low_percentile" value="99.5" min="0" max="100" step="0.001">
+              </div>
+              <div class="field">
+                <label class="lbl" for="high_percentile">Верхний перцентиль <span class="hint">%, float</span></label>
+                <input type="number" id="high_percentile" value="99.9" min="0" max="100" step="0.001">
               </div>
               <div class="field">
                 <label class="lbl" for="rel-error">Отн. ошибка <span class="hint">0–1</span></label>
@@ -338,7 +342,7 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
               </div>
             </div>
             <div class="field__note" style="margin-top:-6px; margin-bottom: 15px;">
-              На бэкенде <code>JobParams.Percentile</code> — одно целое число (не нижний/верхний перцентиль, как в разовой обработке) и <code>rel_error</code> ограничен диапазоном 0–1. Дробные значения перцентиля сервер сейчас отклонит.
+              На бэкенде <code>JobParams.Percentile</code>.
             </div>
 
             <div class="field">
@@ -492,6 +496,18 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
             </div>
           </div>
 
+          <!-- ---- Results gallery (SSE) ---- -->
+          <div class="gallery-wrap">
+            <div class="gallery-head">
+              <span class="eyebrow">Результаты</span>
+              <span class="gallery-count" id="gallery-count">0</span>
+            </div>
+            <div class="gallery" id="gallery"></div>
+            <div class="gallery-empty" id="gallery-empty">
+              Картинки появятся здесь по мере готовности.
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
@@ -531,6 +547,11 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
       <button type="button" class="btn btn--primary btn--sm" id="browse-select">Выбрать эту папку</button>
     </div>
   </div>
+</div>
+
+<div class="lightbox hidden" id="lightbox">
+  <button type="button" class="lightbox__close" id="lightbox-close">✕</button>
+  <img id="lightbox-img" alt="">
 </div>
 
 <script src="/static/js/batch_mass_list.js"></script>

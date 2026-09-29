@@ -3,7 +3,8 @@ from src.protobuf import plot_pb2_grpc as pb2_grpc
 import grpc
 
 import pandas as pd
-
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from datetime import datetime
 import io

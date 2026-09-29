@@ -2,23 +2,29 @@
 package handlers
 
 import (
+	grpcclient "MassSpectraWorker/internal/client"
+	pb "MassSpectraWorker/src/protobuf"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	grpcclient "MassSpectraWorker/internal/client"
-	pb "MassSpectraWorker/src/protobuf"
+	"github.com/go-chi/chi/v5"
+
+	"MassSpectraWorker/internal/config"
 )
 
 // MassListHandler - обработчик для запросов графиков
 type MassListHandler struct {
 	grpcClient *grpcclient.GRPCClient
+	cfg        config.Config
 }
 
 // NewPlotHandler - создает новый обработчик
@@ -29,6 +35,7 @@ func NewMassListHandler() (*MassListHandler, error) {
 	}
 	return &MassListHandler{
 		grpcClient: client,
+		cfg:        config.LoadConfig(),
 	}, nil
 }
 
@@ -217,4 +224,33 @@ func (h *MassListHandler) GetInfo(w http.ResponseWriter, r *http.Request) {
 		"grpc_server": "localhost:50051",
 		"status":      "running",
 	})
+}
+
+// GET /results/{jobID}/{name}
+func (h *MassListHandler) HandleResultImage(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobID") // или r.PathValue("jobID") в Go 1.22+
+	name := chi.URLParam(r, "name")
+
+	// защита от path traversal
+	if strings.Contains(jobID, "..") || strings.Contains(name, "..") ||
+		strings.ContainsAny(jobID+name, `/\`) {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	full := filepath.Join(h.cfg.ResultsDir, jobID, name)
+
+	// опционально: проверяем, что файл существует
+	f, err := os.Open(full)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	if _, err := io.Copy(w, f); err != nil {
+		log.Printf("stream image: %v", err)
+	}
 }

@@ -14,6 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type ItemResult struct {
+	ID          uuid.UUID
+	SpectraName string
+	ResultPath  string
+}
+
 type BatchService struct {
 	repo *repository.JobRepository
 	pool *worker.WorkerPool

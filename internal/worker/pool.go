@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"MassSpectraWorker/internal/config"
 
 	"github.com/google/uuid"
 
@@ -25,6 +28,7 @@ type WorkerPool struct {
 	wg           sync.WaitGroup
 	ctx          context.Context
 	cancel       context.CancelFunc
+	cfg          config.Config
 }
 
 func NewWorkerPool(repo *repository.JobRepository,
@@ -37,6 +41,7 @@ func NewWorkerPool(repo *repository.JobRepository,
 		jobs:         make(chan uuid.UUID, 100),
 		ctx:          ctx,
 		cancel:       cancel,
+		cfg:          config.LoadConfig(),
 	}
 }
 
@@ -134,7 +139,7 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 			failedItems++
 		} else {
 			status = "done"
-			resultPath = new(fmt.Sprintf("/results/%s/%s.png", jobID, item.SpectraName))
+			resultPath = new(p.resultPath(jobID, item.SpectraName))
 			doneItems++
 		}
 
@@ -205,7 +210,7 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 	}
 
 	// 4. Сохраняем результат
-	resultPath := fmt.Sprintf("/results/%s/%s.png", item.JobID, item.SpectraName)
+	resultPath := p.resultPath(item.JobID, item.SpectraName)
 	if err := p.saveResult(resultPath, resp.ImageData); err != nil {
 		return fmt.Errorf("failed to save result: %w", err)
 	}
@@ -223,4 +228,9 @@ func (p *WorkerPool) saveResult(path string, data []byte) error {
 	}
 
 	return os.WriteFile(path, data, 0644)
+}
+
+func (p *WorkerPool) resultPath(jobID uuid.UUID, spectraName string) string {
+	base := strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
+	return filepath.Join(p.cfg.ResultsDir, jobID.String(), base+".png")
 }

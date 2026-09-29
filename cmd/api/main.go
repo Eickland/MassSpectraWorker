@@ -108,6 +108,7 @@ func main() {
 	r.Post("/api/plot", plotHandler.ProcessMassList)
 	r.Get("/api/health", plotHandler.HealthCheck)
 	r.Get("/api/info", plotHandler.GetInfo)
+	r.Get("/results/{jobID}/{name}", plotHandler.HandleResultImage)
 
 	// === API маршруты для batch ===
 	r.Route("/api/batch", func(r chi.Router) {
@@ -117,6 +118,7 @@ func main() {
 		r.Get("/{job_id}/events", batchHandler.GetJobEvents)
 		r.Get("/{job_id}/results.zip", batchHandler.GetJobResultsZip)
 		r.Post("/{job_id}/cancel", batchHandler.CancelJob)
+
 	})
 
 	// 6. Настраиваем HTTP сервер

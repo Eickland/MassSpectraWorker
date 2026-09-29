@@ -63,6 +63,10 @@ const clearHistoryBtn = $('clear-history');
 const toast     = $('toast');
 const toastText = $('toast-text');
 
+const galleryEl      = document.getElementById("gallery");
+const galleryEmptyEl = document.getElementById("gallery-empty");
+const galleryCountEl = document.getElementById("gallery-count");
+
 /* ---------- Local state ---------- */
 let currentJobId = null;
 let currentPage = 1;
@@ -71,6 +75,7 @@ let es = null;
 let pollTimer = null;
 let itemsRefreshTimer = null;
 let sourceMode = 'folder';
+let eventSource = null;
 
 /* ============================================================
    Status pill (topbar)
@@ -107,6 +112,109 @@ function setMode(mode) {
 modeBtnFolder.addEventListener('click', () => setMode('folder'));
 modeBtnItems.addEventListener('click', () => setMode('items'));
 
+function addGalleryItem({ id, result_url, spectra_name }) {
+  if (!result_url) return;
+  // защита от дубликатов при переподключении
+  if (galleryEl.querySelector(`[data-item-id="${id}"]`)) return;
+
+  const card = document.createElement("div");
+  card.className = "gallery-card";
+  card.dataset.itemId = id;
+
+  const img = document.createElement("img");
+  img.className = "gallery-card__img";
+  img.loading = "lazy";
+  img.src = result_url;
+  img.alt = spectra_name || id;
+  img.addEventListener("click", () => openLightbox(result_url, img.alt));
+
+  const meta = document.createElement("div");
+  meta.className = "gallery-card__meta";
+
+  const name = document.createElement("span");
+  name.className = "gallery-card__name";
+  name.title = spectra_name || "";
+  name.textContent = spectra_name || id;
+
+  const actions = document.createElement("div");
+  actions.className = "gallery-card__actions";
+  actions.innerHTML = `
+    <a href="${result_url}" target="_blank" rel="noopener" title="Открыть в новой вкладке">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    </a>
+    <a href="${result_url}" download title="Скачать">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </a>`;
+
+  meta.appendChild(name);
+  meta.appendChild(actions);
+  card.appendChild(img);
+  card.appendChild(meta);
+  galleryEl.appendChild(card);
+
+  galleryEmptyEl.classList.add("hidden");
+  galleryCountEl.textContent = galleryEl.children.length;
+}
+
+function resetGallery() {
+  galleryEl.innerHTML = "";
+  galleryCountEl.textContent = "0";
+  galleryEmptyEl.classList.remove("hidden");
+}
+
+function openLightbox(src, alt) {
+  const lb = document.getElementById("lightbox");
+  const im = document.getElementById("lightbox-img");
+  im.src = src; im.alt = alt || "";
+  lb.classList.remove("hidden");
+}
+document.getElementById("lightbox-close")?.addEventListener("click", () => {
+  document.getElementById("lightbox").classList.add("hidden");
+  document.getElementById("lightbox-img").src = "";
+});
+
+// ==== SSE ====
+function subscribeJobEvents(jobId) {
+  closeEventSource();
+
+  eventSource = new EventSource(`/api/batch/${jobId}/events`);
+
+  eventSource.addEventListener("init", (e) => {
+    const payload = JSON.parse(e.data);
+    // сервер шлёт { event: "init", data: { results: [...] } }
+    const results = payload?.data?.results || [];
+    results.forEach(addGalleryItem);
+  });
+
+  eventSource.addEventListener("item_done", (e) => {
+    const item = JSON.parse(e.data);
+    addGalleryItem(item);
+  });
+
+  eventSource.addEventListener("job_done", (e) => {
+    const info = JSON.parse(e.data);
+    // можно обновить статус и закрыть стрим
+    closeEventSource();
+    refreshJob(jobId); // если у вас есть функция обновления таблицы/прогресса
+  });
+
+  eventSource.addEventListener("error", () => {
+    // EventSource сам переподключится; но при 4xx лучше закрыть
+    if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+      closeEventSource();
+    }
+  });
+}
+
+function closeEventSource() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+}
+
+window.addEventListener("beforeunload", closeEventSource);
+
 /* ============================================================
    Parse "имя = путь" / "путь" textarea into [{name, path}]
    ============================================================ */
@@ -135,7 +243,8 @@ function parseItemsText(text) {
    ============================================================ */
 function collectParams() {
   return {
-    percentile: Math.round(parseFloat($('percentile').value) || 99),
+    low_percentile: parseFloat($('low_percentile').value) || 99.5,
+    high_percentile: parseFloat($('high_percentile').value) || 99.9,
     rel_error: parseFloat($('rel-error').value) || 0.5,
     protocol: $('protocol').value,
     brutto_dict: $('brutto-dict').value.trim(),
@@ -246,9 +355,9 @@ function trackJob(jobId) {
       } catch (err) { /* ignore malformed frame */ }
     };
 
-    es.addEventListener('item_done', () => {
-      fetchStatus(jobId);
-      scheduleItemsRefresh(jobId);
+    es.addEventListener("item_done", (e) => {
+      const it = JSON.parse(e.data);
+      addImage(it);
     });
     es.addEventListener('item_failed', () => {
       fetchStatus(jobId);
@@ -263,7 +372,7 @@ function trackJob(jobId) {
       finishTracking();
     });
     es.addEventListener('ping', () => { /* keep-alive, no-op */ });
-
+    
     es.onerror = () => {
       if (es) { es.close(); es = null; }
       startPolling(jobId);
@@ -271,6 +380,14 @@ function trackJob(jobId) {
   } catch (err) {
     startPolling(jobId);
   }
+}
+
+function addImage(it) {
+  const img = document.createElement("img");
+  img.src = it.result_url;          // "/results/<jobID>/<name>"
+  img.alt = it.spectra_name;
+  img.dataset.itemId = it.item_id;
+  document.querySelector("#gallery").appendChild(img);
 }
 
 function startPolling(jobId) {
@@ -629,6 +746,8 @@ function buildHeaderSpectrum(el, count) {
   }
   el.innerHTML = html;
 }
+
+
 
 /* ============================================================
    Init
