@@ -64,6 +64,41 @@ func (r *JobRepository) CreateJobItems(items []model.JobItem) error {
 	return tx.Commit()
 }
 
+func (r *JobRepository) UpdateItemStatusSimple(id uuid.UUID, status string) error {
+	_, err := r.db.Exec(`
+		UPDATE batch_job_items
+		SET status = $1
+		WHERE id = $8`,
+		status,
+		id,
+	)
+	return err
+}
+
+func (r *JobRepository) UpdateItemResult(item model.JobItem) error {
+	_, err := r.db.Exec(`
+		UPDATE batch_job_items
+		SET status = $1,
+		    result_path   = $2,
+		    spectrum_path = $3,
+		    spectrum_rows = $4,
+		    spectrum_cols = $5,
+		    spectrum_size = $6,
+		    error         = $7,
+		    finished_at   = now()
+		WHERE id = $8`,
+		item.Status,
+		item.ResultPath,
+		item.SpectrumPath,
+		item.SpectrumRows,
+		item.SpectrumCols,
+		item.SpectrumSize,
+		item.Error,
+		item.ID,
+	)
+	return err
+}
+
 // GetJobByID - получение задачи по ID
 func (r *JobRepository) GetJobByID(id uuid.UUID) (*model.Job, error) {
 	var job model.Job

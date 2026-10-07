@@ -44,16 +44,20 @@ type JobParams struct {
 
 // JobItem - элемент задачи (один спектр)
 type JobItem struct {
-	ID          uuid.UUID  `db:"id" json:"id"`
-	JobID       uuid.UUID  `db:"job_id" json:"job_id"`
-	SpectraName string     `db:"spectra_name" json:"spectra_name"`
-	SpectraPath string     `db:"spectra_path" json:"spectra_path"`
-	Status      string     `db:"status" json:"status"` // pending | processing | done | failed
-	ResultPath  *string    `db:"result_path" json:"result_path,omitempty"`
-	Error       *string    `db:"error" json:"error,omitempty"`
-	FileHash    *string    `db:"file_hash" json:"file_hash,omitempty"`
-	StartedAt   *time.Time `db:"created_at" json:"created_at,omitempty"`
-	FinishedAt  *time.Time `db:"finished_at" json:"finished_at,omitempty"`
+	ID           uuid.UUID  `db:"id" json:"id"`
+	JobID        uuid.UUID  `db:"job_id" json:"job_id"`
+	SpectraName  string     `db:"spectra_name" json:"spectra_name"`
+	SpectraPath  string     `db:"spectra_path" json:"spectra_path"`
+	Status       string     `db:"status" json:"status"` // pending | processing | done | failed
+	ResultPath   *string    `db:"result_path" json:"result_path,omitempty"`
+	Error        *string    `db:"error" json:"error,omitempty"`
+	FileHash     *string    `db:"file_hash" json:"file_hash,omitempty"`
+	StartedAt    *time.Time `db:"created_at" json:"created_at,omitempty"`
+	FinishedAt   *time.Time `db:"finished_at" json:"finished_at,omitempty"`
+	SpectrumPath *string    `db:"spectrum_path" json:"spectrum_path"` //Путь к таблице
+	SpectrumRows *int       `db:"spectrum_rows" json:"spectrum_rows"`
+	SpectrumCols *int       `db:"spectrum_cols" json:"spectrum_cols"`
+	SpectrumSize *int64     `db:"spectrum_size" json:"spectrum_size"`
 }
 
 // JobProgress - прогресс задачи (для SSE)

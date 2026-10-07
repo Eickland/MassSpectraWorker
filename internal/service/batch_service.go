@@ -25,6 +25,13 @@ type BatchService struct {
 	pool *worker.WorkerPool
 }
 
+type JobResultFile struct {
+	ItemID       uuid.UUID
+	SpectraName  string
+	PlotPath     string
+	SpectrumPath string
+}
+
 func NewBatchService(repo *repository.JobRepository, pool *worker.WorkerPool) *BatchService {
 	return &BatchService{
 		repo: repo,
@@ -193,17 +200,33 @@ func (s *BatchService) CancelJob(id uuid.UUID) error {
 }
 
 // GetJobResults - получение путей к результатам для ZIP
-func (s *BatchService) GetJobResults(id uuid.UUID) ([]string, error) {
+func (s *BatchService) GetJobResults(id uuid.UUID) ([]JobResultFile, error) {
 	items, err := s.repo.GetJobItems(id)
 	if err != nil {
 		return nil, err
 	}
 
-	var resultPaths []string
+	var files []JobResultFile
 	for _, item := range items {
-		if item.Status == "done" && item.ResultPath != nil {
-			resultPaths = append(resultPaths, *item.ResultPath)
+		if item.Status != "done" {
+			continue
 		}
+		var plot, spectrum string
+		if item.ResultPath != nil {
+			plot = *item.ResultPath
+		}
+		if item.SpectrumPath != nil {
+			spectrum = *item.SpectrumPath
+		}
+		if plot == "" && spectrum == "" {
+			continue
+		}
+		files = append(files, JobResultFile{
+			ItemID:       item.ID,
+			SpectraName:  item.SpectraName,
+			PlotPath:     plot,
+			SpectrumPath: spectrum,
+		})
 	}
-	return resultPaths, nil
+	return files, nil
 }

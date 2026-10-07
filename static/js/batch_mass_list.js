@@ -75,13 +75,12 @@ let es = null;
 let pollTimer = null;
 let itemsRefreshTimer = null;
 let sourceMode = 'folder';
-let eventSource = null;
 
 /* ============================================================
    Status pill (topbar)
    ============================================================ */
 const STATUS_LABELS = {
-  ready: 'Готов', loading: 'Обработка', success: 'Готово', error: 'Ошибка',
+  ready: 'Готов', loading: 'Обработка', success: 'Готово', error: 'Ошибка', converting: 'Конвертация', processing: 'Извлечение'
 };
 function setTopStatus(state, text) {
   statusEl.dataset.state = state;
@@ -112,10 +111,12 @@ function setMode(mode) {
 modeBtnFolder.addEventListener('click', () => setMode('folder'));
 modeBtnItems.addEventListener('click', () => setMode('items'));
 
-function addGalleryItem({ id, result_url, spectra_name }) {
-  if (!result_url) return;
-  // защита от дубликатов при переподключении
-  if (galleryEl.querySelector(`[data-item-id="${id}"]`)) return;
+function addGalleryItem(raw) {
+  const id = raw.id ?? raw.item_id;
+  const result_url = raw.result_url;
+  const spectra_name = raw.spectra_name;
+  if (!result_url || id == null) return;
+  if (galleryEl.querySelector(`[data-item-id="${CSS.escape(String(id))}"]`)) return;
 
   const card = document.createElement("div");
   card.className = "gallery-card";
@@ -174,46 +175,9 @@ document.getElementById("lightbox-close")?.addEventListener("click", () => {
 });
 
 // ==== SSE ====
-function subscribeJobEvents(jobId) {
-  closeEventSource();
 
-  eventSource = new EventSource(`/api/batch/${jobId}/events`);
 
-  eventSource.addEventListener("init", (e) => {
-    const payload = JSON.parse(e.data);
-    // сервер шлёт { event: "init", data: { results: [...] } }
-    const results = payload?.data?.results || [];
-    results.forEach(addGalleryItem);
-  });
 
-  eventSource.addEventListener("item_done", (e) => {
-    const item = JSON.parse(e.data);
-    addGalleryItem(item);
-  });
-
-  eventSource.addEventListener("job_done", (e) => {
-    const info = JSON.parse(e.data);
-    // можно обновить статус и закрыть стрим
-    closeEventSource();
-    refreshJob(jobId); // если у вас есть функция обновления таблицы/прогресса
-  });
-
-  eventSource.addEventListener("error", () => {
-    // EventSource сам переподключится; но при 4xx лучше закрыть
-    if (eventSource && eventSource.readyState === EventSource.CLOSED) {
-      closeEventSource();
-    }
-  });
-}
-
-function closeEventSource() {
-  if (eventSource) {
-    eventSource.close();
-    eventSource = null;
-  }
-}
-
-window.addEventListener("beforeunload", closeEventSource);
 
 /* ============================================================
    Parse "имя = путь" / "путь" textarea into [{name, path}]
@@ -336,6 +300,7 @@ function stopTracking() {
 
 function trackJob(jobId) {
   stopTracking();
+  resetGallery();
   currentJobId = jobId;
   currentPage = 1;
   showActiveState(jobId);
@@ -351,13 +316,19 @@ function trackJob(jobId) {
     es.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data);
-        if (msg && msg.event === 'init' && msg.data) applyProgress(msg.data);
-      } catch (err) { /* ignore malformed frame */ }
+        if (msg && msg.event === 'init' && msg.data) {
+          applyProgress(msg.data);
+          (msg.data.results || []).forEach(addGalleryItem);   // если сервер шлёт results
+        }
+      } catch (err) {}
     };
 
-    es.addEventListener("item_done", (e) => {
-      const it = JSON.parse(e.data);
-      addImage(it);
+    es.addEventListener('item_done', (e) => {
+      try {
+        addGalleryItem(JSON.parse(e.data));
+      } catch (err) {}
+      fetchStatus(jobId);          // обновить счётчики и прогресс
+      scheduleItemsRefresh(jobId);
     });
     es.addEventListener('item_failed', () => {
       fetchStatus(jobId);
@@ -382,13 +353,6 @@ function trackJob(jobId) {
   }
 }
 
-function addImage(it) {
-  const img = document.createElement("img");
-  img.src = it.result_url;          // "/results/<jobID>/<name>"
-  img.alt = it.spectra_name;
-  img.dataset.itemId = it.item_id;
-  document.querySelector("#gallery").appendChild(img);
-}
 
 function startPolling(jobId) {
   if (pollTimer) return;
@@ -488,7 +452,13 @@ function applyProgress(progress) {
   downloadZipBtn.disabled = !canDownload;
   if (canDownload && currentJobId) {
     downloadZipBtn.onclick = () => {
-      window.open(`/api/batch/${currentJobId}/results.zip`, '_blank');
+      const url = `/api/batch/${currentJobId}/results.zip`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `job_${currentJobId}_results.zip`; // подсказка имени
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     };
   } else {
     downloadZipBtn.onclick = null;
@@ -508,6 +478,7 @@ function applyProgress(progress) {
 }
 
 function renderItems(items) {
+  items.forEach((it) => { if (it.status === 'done' && it.result_url) addGalleryItem(it); });
   if (!items.length) {
     itemsBody.innerHTML = '<div class="items-row" style="color:var(--text-dim)">Файлов пока нет</div>';
     return;

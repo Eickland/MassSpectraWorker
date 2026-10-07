@@ -21,6 +21,35 @@ import traceback
 
 logging.basicConfig(level=logging.DEBUG)
 
+def df_to_proto(df: pd.DataFrame) -> pb2.MassSpectrumTable:
+    cols = []
+    for name, s in df.items():
+        c = pb2.Column(name=name) # type: ignore
+        if pd.api.types.is_float_dtype(s):
+            c.dtype = "float64"
+            # NaN → null_mask, а в double_data кладём 0.0
+            mask = s.isna().to_numpy().nonzero()[0]
+            c.double_data.extend(s.fillna(0.0).astype("float64").tolist())
+            if mask.size:
+                c.null_mask.extend(mask.tolist())
+        elif pd.api.types.is_integer_dtype(s):
+            c.dtype = "int64"
+            mask = s.isna().to_numpy().nonzero()[0]
+            c.int_data.extend(s.fillna(0).astype("int64").tolist())
+            if mask.size:
+                c.null_mask.extend(mask.tolist())
+        elif pd.api.types.is_bool_dtype(s):
+            c.dtype = "bool"
+            c.bool_data.extend(s.fillna(False).astype(bool).tolist())
+        else:
+            c.dtype = "string"
+            c.str_data.extend(s.fillna("").astype(str).tolist())
+            mask = s.isna().to_numpy().nonzero()[0]
+            if mask.size:
+                c.null_mask.extend(mask.tolist())
+        cols.append(c)
+    return pb2.MassSpectrumTable(columns=cols, n_rows=len(df), n_cols=df.shape[1])
+
 
 class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
     
@@ -54,6 +83,7 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
             image_bytes = plot_service._fig_to_bytes(fig, format=fmt, dpi=request.dpi)
             plt.close(fig)
             
+            
             mime_types = {
                 'png': 'image/png',
                 'svg': 'image/svg+xml',
@@ -68,6 +98,7 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
                 size_bytes=len(image_bytes),
                 mime_type=mime_types.get(fmt, 'image/png'),
                 generated_at=int(datetime.now().timestamp()),
+                spectrum=df_to_proto(ms_spectra)
             )
             
         except Exception as e:

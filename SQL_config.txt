@@ -1,3 +1,9 @@
 massspectraworkerdb
-Kirill
-21754
+kirill
+2175
+
+Удаление бд:
+sudo -u postgres psql
+DROP DATABASE massspectraworkerdb;
+CREATE DATABASE massspectraworkerdb OWNER kirill;
+psql -U kirill -d massspectraworkerdb -f /home/kirill/MassSpectraWorker/src/storage/job_table.sql

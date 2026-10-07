@@ -1,7 +1,7 @@
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
@@ -71,17 +71,47 @@ class MassListRequest(_message.Message):
     def __init__(self, spectra_name: _Optional[str] = ..., low_percentile: _Optional[float] = ..., high_percentile: _Optional[float] = ..., rel_error: _Optional[float] = ..., charge_max: _Optional[int] = ..., brutto_dict: _Optional[_Mapping[str, BruttoRange]] = ..., protocole: _Optional[str] = ..., spectra_path: _Optional[str] = ..., width: _Optional[int] = ..., height: _Optional[int] = ..., dpi: _Optional[int] = ..., format: _Optional[str] = ..., options: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class MassListResponse(_message.Message):
-    __slots__ = ("image_data", "format", "size_bytes", "mime_type", "generated_at", "info")
+    __slots__ = ("image_data", "format", "size_bytes", "mime_type", "generated_at", "info", "spectrum")
     IMAGE_DATA_FIELD_NUMBER: _ClassVar[int]
     FORMAT_FIELD_NUMBER: _ClassVar[int]
     SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
     MIME_TYPE_FIELD_NUMBER: _ClassVar[int]
     GENERATED_AT_FIELD_NUMBER: _ClassVar[int]
     INFO_FIELD_NUMBER: _ClassVar[int]
+    SPECTRUM_FIELD_NUMBER: _ClassVar[int]
     image_data: bytes
     format: str
     size_bytes: int
     mime_type: str
     generated_at: int
     info: PlotInfo
-    def __init__(self, image_data: _Optional[bytes] = ..., format: _Optional[str] = ..., size_bytes: _Optional[int] = ..., mime_type: _Optional[str] = ..., generated_at: _Optional[int] = ..., info: _Optional[_Union[PlotInfo, _Mapping]] = ...) -> None: ...
+    spectrum: MassSpectrumTable
+    def __init__(self, image_data: _Optional[bytes] = ..., format: _Optional[str] = ..., size_bytes: _Optional[int] = ..., mime_type: _Optional[str] = ..., generated_at: _Optional[int] = ..., info: _Optional[_Union[PlotInfo, _Mapping]] = ..., spectrum: _Optional[_Union[MassSpectrumTable, _Mapping]] = ...) -> None: ...
+
+class Column(_message.Message):
+    __slots__ = ("name", "dtype", "double_data", "int_data", "str_data", "bool_data", "null_mask")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DTYPE_FIELD_NUMBER: _ClassVar[int]
+    DOUBLE_DATA_FIELD_NUMBER: _ClassVar[int]
+    INT_DATA_FIELD_NUMBER: _ClassVar[int]
+    STR_DATA_FIELD_NUMBER: _ClassVar[int]
+    BOOL_DATA_FIELD_NUMBER: _ClassVar[int]
+    NULL_MASK_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    dtype: str
+    double_data: _containers.RepeatedScalarFieldContainer[float]
+    int_data: _containers.RepeatedScalarFieldContainer[int]
+    str_data: _containers.RepeatedScalarFieldContainer[str]
+    bool_data: _containers.RepeatedScalarFieldContainer[bool]
+    null_mask: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, name: _Optional[str] = ..., dtype: _Optional[str] = ..., double_data: _Optional[_Iterable[float]] = ..., int_data: _Optional[_Iterable[int]] = ..., str_data: _Optional[_Iterable[str]] = ..., bool_data: _Optional[_Iterable[bool]] = ..., null_mask: _Optional[_Iterable[int]] = ...) -> None: ...
+
+class MassSpectrumTable(_message.Message):
+    __slots__ = ("columns", "n_rows", "n_cols")
+    COLUMNS_FIELD_NUMBER: _ClassVar[int]
+    N_ROWS_FIELD_NUMBER: _ClassVar[int]
+    N_COLS_FIELD_NUMBER: _ClassVar[int]
+    columns: _containers.RepeatedCompositeFieldContainer[Column]
+    n_rows: int
+    n_cols: int
+    def __init__(self, columns: _Optional[_Iterable[_Union[Column, _Mapping]]] = ..., n_rows: _Optional[int] = ..., n_cols: _Optional[int] = ...) -> None: ...

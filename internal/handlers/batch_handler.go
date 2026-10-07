@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -329,57 +331,93 @@ func (h *BatchHandler) GetJobResultsZip(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Получаем пути к результатам
-	resultPaths, err := h.service.GetJobResults(jobID)
+	files, err := h.service.GetJobResults(jobID)
 	if err != nil {
 		http.Error(w, "Job not found", http.StatusNotFound)
 		return
 	}
-
-	if len(resultPaths) == 0 {
+	if len(files) == 0 {
 		http.Error(w, "No results found for this job", http.StatusNotFound)
 		return
 	}
 
-	// Создаем ZIP на лету
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=job_%s_results.zip", jobID))
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=job_%s_results.zip", jobID))
 
-	zipWriter := zip.NewWriter(w)
-	defer zipWriter.Close()
+	zw := zip.NewWriter(w)
+	// ВАЖНО: не defer-им Close, закроем явно в конце.
+	// И defer-им на случай паники в середине — но тогда w уже частично записан,
+	// это неизбежно для streaming-подхода.
 
-	for _, filePath := range resultPaths {
-		// Проверяем, существует ли файл
-		_, err := os.Stat(filePath)
-		if err != nil {
-			continue // Пропускаем отсутствующие файлы
+	for _, f := range files {
+		// Папка на каждый спектр, чтобы png и спектр были рядом
+		folder := sanitizeZipName(f.SpectraName)
+		if folder == "" {
+			folder = f.ItemID.String()
 		}
 
-		// Открываем файл
-		file, err := os.Open(filePath)
-		if err != nil {
-			continue
+		if err := addFileToZip(zw, f.PlotPath, folder); err != nil {
+			log.Printf("zip: job=%s item=%s plot: %v", jobID, f.ItemID, err)
 		}
-		defer file.Close()
-
-		// Создаем запись в ZIP
-		fileName := filepath.Base(filePath)
-		writer, err := zipWriter.Create(fileName)
-		if err != nil {
-			continue
-		}
-
-		// Копируем содержимое
-		if _, err := io.Copy(writer, file); err != nil {
-			continue
+		if err := addFileToZip(zw, f.SpectrumPath, folder); err != nil {
+			log.Printf("zip: job=%s item=%s spectrum: %v", jobID, f.ItemID, err)
 		}
 	}
 
-	// Закрываем ZIP
-	if err := zipWriter.Close(); err != nil {
-		http.Error(w, "Failed to create ZIP", http.StatusInternalServerError)
+	if err := zw.Close(); err != nil {
+		// Заголовки уже отправлены — только логируем
+		log.Printf("zip: job=%s final close: %v", jobID, err)
 		return
 	}
+}
+
+func addFileToZip(zw *zip.Writer, path, folder string) error {
+	if path == "" {
+		return nil
+	}
+	src, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer src.Close()
+
+	info, err := src.Stat()
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+
+	name := filepath.Base(path)
+	if folder != "" {
+		name = folder + "/" + name
+	}
+
+	hdr, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+	hdr.Name = name
+	hdr.Method = zip.Deflate // иначе png/parquet лягут "как есть" без сжатия
+
+	dst, err := zw.CreateHeader(hdr)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		return fmt.Errorf("copy %s: %w", path, err)
+	}
+	return nil
+}
+
+func sanitizeZipName(s string) string {
+	// Убираем слэши, двоеточия, ведущие точки и прочее,
+	// что может сломать структуру ZIP или выйти за пределы (zip-slip)
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "/", "_")
+	s = strings.ReplaceAll(s, "\\", "_")
+	s = strings.ReplaceAll(s, ":", "_")
+	s = strings.Trim(s, ".")
+	return s
 }
 
 // CancelJob - POST /api/batch/{job_id}/cancel

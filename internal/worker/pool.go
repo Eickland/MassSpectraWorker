@@ -5,10 +5,14 @@ import (
 	"MassSpectraWorker/internal/model"
 	"MassSpectraWorker/internal/repository"
 	"context"
+	"encoding/csv"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +37,7 @@ type WorkerPool struct {
 
 func NewWorkerPool(repo *repository.JobRepository,
 	pythonClient *client.GRPCClient, workers int) *WorkerPool {
+
 	ctx, cancel := context.WithCancel(context.Background())
 	return &WorkerPool{
 		repo:         repo,
@@ -43,6 +48,7 @@ func NewWorkerPool(repo *repository.JobRepository,
 		cancel:       cancel,
 		cfg:          config.LoadConfig(),
 	}
+
 }
 
 // Start - запуск воркеров
@@ -88,6 +94,13 @@ func (p *WorkerPool) worker(id int) {
 	}
 }
 
+func (p *WorkerPool) spectrumPath(jobID uuid.UUID, spectraName string) (string, error) {
+	base := strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
+	// формат хранения спектра — CSV или Parquet
+	ext := ".csv" // или ".parquet" — см. п.4
+	return filepath.Join(p.cfg.ResultsDir, jobID.String(), base+"_spectrum"+ext), nil
+}
+
 // processJob - обработка одной задачи
 func (p *WorkerPool) processJob(jobID uuid.UUID) {
 	// Обновляем статус задачи на running
@@ -127,27 +140,21 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 
 		item := items[0]
 
-		// Обрабатываем элемент
 		err = p.processItem(&item)
 
-		// Обновляем статус элемента
-		var status string
-		var resultPath, errMsg *string
 		if err != nil {
-			status = "failed"
-			errMsg = new(err.Error())
+			item.Status = "failed"
+			item.Error = new(err.Error())
 			failedItems++
 		} else {
-			status = "done"
-			resultPath = new(p.resultPath(jobID, item.SpectraName))
+			item.Status = "done"
 			doneItems++
 		}
 
-		if updateErr := p.repo.UpdateItemStatus(item.ID, status, resultPath, errMsg); updateErr != nil {
-			log.Printf("Failed to update item status: %v", updateErr)
+		if updateErr := p.repo.UpdateItemResult(item); updateErr != nil {
+			log.Printf("Failed to update item: %v", updateErr)
 		}
 
-		// Обновляем счетчики задачи
 		if err := p.repo.UpdateJobCounters(jobID, doneItems, failedItems); err != nil {
 			log.Printf("Failed to update job counters: %v", err)
 		}
@@ -181,15 +188,37 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 		return fmt.Errorf("job cancelled before processing")
 	}
 
-	// 1. Получаем параметры задачи (через JOIN)
 	job, err := p.repo.GetJobByID(item.JobID)
 	if err != nil {
 		return fmt.Errorf("failed to get job: %w", err)
 	}
 
-	// 2. Формируем запрос к Python
+	kind := detectInputKind(item.SpectraPath) // "mzml" | "d" | "unknown"
+
+	var mzmlPath string
+	switch kind {
+	case "mzml":
+		mzmlPath = item.SpectraPath
+	case "d":
+		// 2. Конвертируем .d → .mzML (с кэшем)
+		mzmlPath = p.mzmlCachePath(item.JobID, item.SpectraName)
+		if !fileExists(mzmlPath) {
+			if err := p.repo.UpdateItemStatusSimple(item.ID, "converting"); err != nil {
+				return err
+			}
+			if err := p.convertDToMzML(item.SpectraPath, mzmlPath); err != nil {
+				return fmt.Errorf("convert .d → .mzML: %w", err)
+			}
+			if err := p.repo.UpdateItemStatusSimple(item.ID, "processing"); err != nil {
+				return err
+			}
+		}
+	default:
+		return fmt.Errorf("unsupported input: %s", item.SpectraPath)
+	}
+
 	req := &pb.MassListRequest{
-		SpectraPath:    item.SpectraPath,
+		SpectraPath:    mzmlPath,
 		SpectraName:    item.SpectraName,
 		LowPercentile:  job.Params.LowPercentile,
 		HighPercentile: job.Params.HighPercentile,
@@ -199,8 +228,7 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 		Height:         job.Params.Height,
 		Format:         job.Params.OutputFormat,
 	}
-	log.Printf("Item %s name", req.SpectraName)
-	// 3. Вызываем Python-сервис
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -209,28 +237,171 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 		return fmt.Errorf("python processing failed: %w", err)
 	}
 
-	// 4. Сохраняем результат
-	resultPath := p.resultPath(item.JobID, item.SpectraName)
-	if err := p.saveResult(resultPath, resp.ImageData); err != nil {
-		return fmt.Errorf("failed to save result: %w", err)
+	// 4a. Сохраняем картинку
+	plotPath := p.resultPath(item.JobID, item.SpectraName)
+	if err := p.saveResult(plotPath, resp.ImageData); err != nil {
+		return fmt.Errorf("failed to save plot: %w", err)
 	}
 
-	log.Printf("Item %s processed successfully, size: %d bytes", item.ID, resp.SizeBytes)
+	// 4b. Сохраняем спектр (если пришёл)
+	var spectrumPath *string
+	var spectrumRows, spectrumCols *int
+	var spectrumSize *int64
+
+	if resp.Spectrum != nil && resp.Spectrum.NRows > 0 {
+		sp, err := p.spectrumPath(item.JobID, item.SpectraName)
+		if err != nil {
+			return fmt.Errorf("failed to save spectrum: %w", err)
+		}
+
+		if err := p.saveSpectrumCSV(sp, resp.Spectrum); err != nil {
+			return fmt.Errorf("failed to save spectrum: %w", err)
+		}
+		info, err := os.Stat(sp)
+		if err != nil {
+			return fmt.Errorf("failed to stat spectrum: %w", err)
+		}
+		size := info.Size()
+
+		rows := int(resp.Spectrum.NRows)
+		cols := int(resp.Spectrum.NCols)
+		spectrumPath = &sp
+		spectrumRows = &rows
+		spectrumCols = &cols
+		spectrumSize = &size
+	}
+
+	// 5. Одним вызовом обновляем item: статус + пути + метаданные
+	item.Status = "done"
+	item.ResultPath = &plotPath
+	item.SpectrumPath = spectrumPath
+	item.SpectrumRows = spectrumRows
+	item.SpectrumCols = spectrumCols
+	item.SpectrumSize = spectrumSize
+
+	log.Printf("Item %s processed: plot=%d bytes, spectrum_rows=%v",
+		item.ID, len(resp.ImageData), resp.Spectrum.GetNRows())
 	return nil
 }
 
 // saveResult - сохраняет бинарные данные в файл
 func (p *WorkerPool) saveResult(path string, data []byte) error {
-	// Создаём директорию если её нет
-	dir := path[:len(path)-len("/"+path[strings.LastIndex(path, "/")+1:])]
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-
 	return os.WriteFile(path, data, 0644)
 }
 
 func (p *WorkerPool) resultPath(jobID uuid.UUID, spectraName string) string {
 	base := strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
 	return filepath.Join(p.cfg.ResultsDir, jobID.String(), base+".png")
+}
+
+func (p *WorkerPool) mzmlCachePath(jobID uuid.UUID, spectraName string) string {
+	base := strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
+	return filepath.Join(p.cfg.WorkDir, jobID.String(), base+".mzML")
+}
+
+func (p *WorkerPool) saveSpectrumCSV(path string, t *pb.MassSpectrumTable) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	defer w.Flush()
+
+	// заголовок
+	header := make([]string, 0, len(t.Columns))
+	for _, c := range t.Columns {
+		header = append(header, c.Name)
+	}
+	if err := w.Write(header); err != nil {
+		return err
+	}
+
+	// строки
+	rows := int(t.NRows)
+	for i := 0; i < rows; i++ {
+		row := make([]string, len(t.Columns))
+		for j, c := range t.Columns {
+			row[j] = columnValueAt(c, i)
+		}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func columnValueAt(c *pb.Column, i int) string {
+	switch c.Dtype {
+	case "float64":
+		if len(c.DoubleData) > i {
+			return strconv.FormatFloat(c.DoubleData[i], 'f', -1, 64)
+		}
+	case "int64":
+		if len(c.IntData) > i {
+			return strconv.FormatInt(c.IntData[i], 10)
+		}
+	case "bool":
+		if len(c.BoolData) > i {
+			return strconv.FormatBool(c.BoolData[i])
+		}
+	case "string":
+		if len(c.StrData) > i {
+			return c.StrData[i]
+		}
+	}
+	return ""
+}
+
+func detectInputKind(path string) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "unknown"
+	}
+	if info.IsDir() {
+		// .d — это директория, обычно с расширением .d на конце
+		if strings.HasSuffix(strings.ToLower(path), ".d") {
+			return "d"
+		}
+		return "unknown"
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".mzml":
+		return "mzml"
+	case ".mzxml":
+		return "mzxml" // ProteoWizard тоже умеет
+	}
+	return "unknown"
+}
+
+func (p *WorkerPool) convertDToMzML(src, dst string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, p.cfg.MsConvert,
+		src, "-o", filepath.Dir(dst),
+		"--mzML", "--filter", "zeroSamples removeExtra", "--verbose")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("msconvert: %w", err)
+	}
+	if !fileExists(dst) {
+		return fmt.Errorf("msconvert finished but %s not found (name mismatch?)", dst)
+	}
+	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil || errors.Is(err, os.ErrNotExist)
 }

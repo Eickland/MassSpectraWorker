@@ -16,11 +16,15 @@ CREATE TABLE batch_job_items (
   spectra_name  TEXT NOT NULL,
   spectra_path  TEXT NOT NULL,
   status        TEXT NOT NULL DEFAULT 'pending', -- pending | processing | done | failed
-  result_path   TEXT,          -- куда записана картинка
+  result_path   TEXT, --к картинке
   error         TEXT,
-  file_hash     TEXT,          -- см. раздел про кэш
+  file_hash     TEXT,
   created_at    TIMESTAMPTZ,
-  finished_at   TIMESTAMPTZ
+  finished_at   TIMESTAMPTZ,
+  spectrum_path  TEXT,
+  spectrum_rows  INT,
+  spectrum_cols  INT,
+  spectrum_size  BIGINT
 );
 
 CREATE INDEX idx_batch_job_items_job_id ON batch_job_items(job_id);

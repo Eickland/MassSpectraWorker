@@ -48,5 +48,23 @@ message MassListResponse {
   string mime_type = 4;
   int64 generated_at = 5;
   PlotInfo info = 6;
+
+  MassSpectrumTable spectrum = 7; 
   
+}
+
+message Column {
+  string name = 1;
+  string dtype = 2;          // "float64", "int64", "string", "bool", ...
+  repeated double double_data = 3;
+  repeated sint64 int_data = 4;   // sint64 для компактности отрицательных
+  repeated string str_data = 5;
+  repeated bool bool_data = 6;
+  repeated uint32 null_mask = 7;  // индексы NaN/None, если есть
+}
+
+message MassSpectrumTable {
+  repeated Column columns = 1;
+  int64 n_rows = 2;
+  int64 n_cols = 3;
 }
