@@ -4,9 +4,9 @@ import (
 	"MassSpectraWorker/internal/client"
 	"MassSpectraWorker/internal/model"
 	"MassSpectraWorker/internal/repository"
+	"bytes"
 	"context"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -141,6 +141,15 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 		item := items[0]
 
 		err = p.processItem(&item)
+		if err != nil {
+			log.Printf("item %s FAILED: %v", item.ID, err)
+			item.Status = "failed"
+			item.Error = new(err.Error())
+			failedItems++
+		} else {
+			item.Status = "done"
+			doneItems++
+		}
 
 		if err != nil {
 			item.Status = "failed"
@@ -178,7 +187,10 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 
 // processItem - обработка одного элемента (спектра)
 func (p *WorkerPool) processItem(item *model.JobItem) error {
+
 	log.Printf("Processing item %s (%s)", item.ID, item.SpectraName)
+	kind := detectInputKind(item.SpectraPath)
+	log.Printf("processItem: path=%q kind=%q", item.SpectraPath, kind)
 
 	cancelled, err := p.repo.IsJobCancelled(item.JobID)
 	if err != nil {
@@ -193,25 +205,33 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 		return fmt.Errorf("failed to get job: %w", err)
 	}
 
-	kind := detectInputKind(item.SpectraPath) // "mzml" | "d" | "unknown"
+	kind = detectInputKind(item.SpectraPath) // "mzml" | "d" | "unknown"
 
 	var mzmlPath string
 	switch kind {
 	case "mzml":
 		mzmlPath = item.SpectraPath
 	case "d":
-		// 2. Конвертируем .d → .mzML (с кэшем)
 		mzmlPath = p.mzmlCachePath(item.JobID, item.SpectraName)
-		if !fileExists(mzmlPath) {
-			if err := p.repo.UpdateItemStatusSimple(item.ID, "converting"); err != nil {
-				return err
-			}
+		info, statErr := os.Stat(mzmlPath)
+		log.Printf("d-branch: src=%q dst=%q statErr=%v statInfo=%v",
+			item.SpectraPath, mzmlPath, statErr, info)
+
+		if statErr != nil {
+			// файла нет — конвертируем
 			if err := p.convertDToMzML(item.SpectraPath, mzmlPath); err != nil {
 				return fmt.Errorf("convert .d → .mzML: %w", err)
 			}
-			if err := p.repo.UpdateItemStatusSimple(item.ID, "processing"); err != nil {
-				return err
+		}
+		log.Printf("d-branch: src=%q dst=%q exists_before=%v",
+			item.SpectraPath, mzmlPath, fileExists(mzmlPath))
+
+		if !fileExists(mzmlPath) {
+			log.Printf("d-branch: running msconvert...")
+			if err := p.convertDToMzML(item.SpectraPath, mzmlPath); err != nil {
+				return fmt.Errorf("convert .d → .mzML: %w", err)
 			}
+			log.Printf("d-branch: msconvert done, exists_after=%v", fileExists(mzmlPath))
 		}
 	default:
 		return fmt.Errorf("unsupported input: %s", item.SpectraPath)
@@ -383,25 +403,43 @@ func detectInputKind(path string) string {
 }
 
 func (p *WorkerPool) convertDToMzML(src, dst string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), p.cfg.ConvertTimeout)
 	defer cancel()
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
+	}
 
+	outDir := filepath.Dir(dst)
+
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, p.cfg.MsConvert,
-		src, "-o", filepath.Dir(dst),
+		src, "-o", outDir,
 		"--mzML", "--filter", "zeroSamples removeExtra", "--verbose")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	log.Printf("msconvert: running %s %v", p.cfg.MsConvert, cmd.Args[1:])
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("msconvert: %w", err)
+		return fmt.Errorf("msconvert exit: %w\nstdout:\n%s\nstderr:\n%s",
+			err, stdout.String(), stderr.String())
 	}
+
 	if !fileExists(dst) {
-		return fmt.Errorf("msconvert finished but %s not found (name mismatch?)", dst)
+		// список файлов в outDir — чтобы понять, что реально создалось
+		entries, _ := os.ReadDir(outDir)
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return fmt.Errorf(
+			"msconvert exit 0 but %q not found; files in %q: %v\nstdout:\n%s\nstderr:\n%s",
+			dst, outDir, names, stdout.String(), stderr.String())
 	}
 	return nil
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil || errors.Is(err, os.ErrNotExist)
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }

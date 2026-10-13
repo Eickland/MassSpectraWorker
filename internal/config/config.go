@@ -3,6 +3,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -15,12 +16,20 @@ type Config struct {
 }
 
 func LoadConfig() Config {
+	work := getEnv("WORK_DIR", "./work")
+	if abs, err := filepath.Abs(work); err == nil {
+		work = abs
+	}
+	results := getEnv("RESULTS_DIR", "./results")
+	if abs, err := filepath.Abs(results); err == nil {
+		results = abs
+	}
 	return Config{
-		ResultsDir:     getEnv("RESULTS_DIR", "./results"),
-		WorkDir:        getEnv("WORK_DIR", "./work"),
+		ResultsDir:     results,
+		WorkDir:        work,
 		MsConvert:      os.Getenv("MSCONVERT_PATH"),
 		ConvertTimeout: getDuration("CONVERT_TIMEOUT", 30*time.Minute),
-		GRPCTimeout:    getDuration("GRPC_TIMEOUT", 60*time.Second),
+		GRPCTimeout:    getDuration("GRPC_TIMEOUT", 200*time.Second),
 	}
 }
 

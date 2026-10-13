@@ -1,0 +1,12 @@
+mkdir -p ~/bin
+nano ~/bin/msconvert
+#!/bin/bash
+docker run --rm -i \
+  -v "$HOME":"$HOME" \
+  -v /mnt:/mnt \
+  -w "$PWD" \
+  chambm/pwiz-skyline-i-agree-to-the-vendor-licenses \
+  wine msconvert.exe "$@"
+chmod +x ~/bin/msconvert
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
