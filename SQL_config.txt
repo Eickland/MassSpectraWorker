@@ -6,4 +6,5 @@ kirill
 sudo -u postgres psql
 DROP DATABASE massspectraworkerdb;
 CREATE DATABASE massspectraworkerdb OWNER kirill;
-psql -U kirill -d massspectraworkerdb -f /home/kirill/MassSpectraWorker/src/storage/job_table.sql
+Применить миграцию:
+migrate -path ./migrations         -database "postgres://kirill:21754@localhost:5432/massspectraworkerdb?sslmode=disable"         up
