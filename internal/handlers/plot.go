@@ -3,6 +3,7 @@ package handlers
 
 import (
 	grpcclient "MassSpectraWorker/internal/client"
+	"MassSpectraWorker/internal/model"
 	pb "MassSpectraWorker/src/protobuf"
 	"context"
 	"encoding/json"
@@ -28,37 +29,32 @@ type MassListHandler struct {
 }
 
 // NewPlotHandler - создает новый обработчик
-func NewMassListHandler() (*MassListHandler, error) {
+func NewMassListHandler(cfg config.Config) (*MassListHandler, error) {
 	client, err := grpcclient.GetClient()
 	if err != nil {
 		return nil, err
 	}
 	return &MassListHandler{
 		grpcClient: client,
-		cfg:        config.LoadConfig(),
+		cfg:        cfg,
 	}, nil
-}
-
-type BruttoRange struct {
-	Min int32 `json:"min"`
-	Max int32 `json:"max"`
 }
 
 // MassListRequest - структура HTTP запроса
 type MassListRequest struct {
-	SpectraName    string                     `json:"spectra_name"`
-	LowPercentile  float32                    `json:"low_percentile"`
-	HighPercentile float32                    `json:"high_percentile"`
-	RelError       float32                    `json:"rel_error"`
-	ChargeMax      int32                      `json:"charge_max"`
-	BruttoDict     map[string]*pb.BruttoRange `json:"brutto_dict"`
-	Protocole      string                     `json:"protocole"`
-	SpectraPath    string                     `json:"spectra_path"`
-	Width          int32                      `json:"width"`
-	Height         int32                      `json:"height"`
-	Dpi            int32                      `json:"dpi"`
-	Format         string                     `json:"format"`
-	Options        map[string]string          `json:"options"`
+	SpectraName    string            `json:"spectra_name"`
+	LowPercentile  float32           `json:"low_percentile"`
+	HighPercentile float32           `json:"high_percentile"`
+	RelError       float32           `json:"rel_error"`
+	ChargeMax      int32             `json:"charge_max"`
+	BruttoDict     model.BruttoDict  `json:"brutto_dict"` // {"C": [4, 50]} или {"C": {"min": 4, "max": 50}}
+	Protocole      string            `json:"protocole"`
+	SpectraPath    string            `json:"spectra_path"`
+	Width          int32             `json:"width"`
+	Height         int32             `json:"height"`
+	Dpi            int32             `json:"dpi"`
+	Format         string            `json:"format"`
+	Options        map[string]string `json:"options"`
 }
 
 // MassListResponse - структура HTTP ответа
@@ -126,6 +122,11 @@ func (h *MassListHandler) ProcessMassList(w http.ResponseWriter, r *http.Request
 		req.Dpi = 100
 	}
 
+	if err := req.BruttoDict.Validate(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// 6. Создаем gRPC запрос
 	grpcReq := &pb.MassListRequest{
 		SpectraName:    req.SpectraName,
@@ -134,7 +135,7 @@ func (h *MassListHandler) ProcessMassList(w http.ResponseWriter, r *http.Request
 		HighPercentile: req.HighPercentile,
 		RelError:       req.RelError,
 		ChargeMax:      req.ChargeMax,
-		BruttoDict:     req.BruttoDict, // ✅ Теперь типы совпадают!
+		BruttoDict:     req.BruttoDict.ToProto(),
 		Protocole:      req.Protocole,
 		Width:          req.Width,
 		Height:         req.Height,
@@ -144,7 +145,7 @@ func (h *MassListHandler) ProcessMassList(w http.ResponseWriter, r *http.Request
 	}
 
 	// 7. Создаем контекст с таймаутом
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.GRPCTimeout)
 	defer cancel()
 
 	// 8. Вызываем gRPC сервер
@@ -248,9 +249,25 @@ func (h *MassListHandler) HandleResultImage(w http.ResponseWriter, r *http.Reque
 	}
 	defer f.Close()
 
-	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Type", resultContentType(name))
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	if _, err := io.Copy(w, f); err != nil {
 		log.Printf("stream image: %v", err)
+	}
+}
+
+// resultContentType - MIME по расширению файла результата
+func resultContentType(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".svg":
+		return "image/svg+xml"
+	case ".pdf":
+		return "application/pdf"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".csv":
+		return "text/csv; charset=utf-8"
+	default:
+		return "image/png"
 	}
 }

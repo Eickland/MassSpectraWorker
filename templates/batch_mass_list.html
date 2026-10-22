@@ -337,12 +337,9 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
                 <input type="number" id="high_percentile" value="99.9" min="0" max="100" step="0.001">
               </div>
               <div class="field">
-                <label class="lbl" for="rel-error">Отн. ошибка <span class="hint">0–1</span></label>
-                <input type="number" id="rel-error" value="0.5" min="0" max="1" step="0.01">
+                <label class="lbl" for="rel-error">Отн. ошибка <span class="hint">ppm</span></label>
+                <input type="number" id="rel-error" value="0.5" min="0.01" max="100" step="0.1">
               </div>
-            </div>
-            <div class="field__note" style="margin-top:-6px; margin-bottom: 15px;">
-              На бэкенде <code>JobParams.Percentile</code>.
             </div>
 
             <div class="field">
@@ -355,12 +352,17 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
             </div>
 
             <div class="field">
+              <label class="lbl" for="charge-max">Макс. заряд <span class="hint">int</span></label>
+              <input type="number" id="charge-max" value="1" min="1" max="10" step="1">
+            </div>
+
+            <div class="field">
               <label class="lbl" for="brutto-dict">
                 Брутто-словарь
-                <span class="hint">строка</span>
+                <span class="hint">JSON</span>
               </label>
               <textarea id="brutto-dict" spellcheck="false" rows="6">{"C": [4, 50], "H": [4, 80], "O": [0, 50], "N": [0, 3], "S": [0, 3]}</textarea>
-              <div class="field__note">В текущей модели <code>brutto_dict</code> — обычная строка (передаётся как есть, сервер её не разбирает).</div>
+              <div class="field__note">Диапазоны атомов: <code>{"элемент": [min, max]}</code>. Пусто — словарь по умолчанию.</div>
             </div>
           </div>
 

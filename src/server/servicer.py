@@ -7,9 +7,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from datetime import datetime
-import io
-import time
-from collections import Counter
+import os
 
 import HumSpectra.mass_spectra.raw_data_process.raw_data_process as raw_data_process
 
@@ -58,14 +56,26 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
         try:
             logging.info(f"Processing: {request.spectra_path}")
             
-            import os
             if not os.path.exists(request.spectra_path):
                 error_msg = f"File not found: {request.spectra_path}"
                 logging.error(error_msg)
                 context.set_code(grpc.StatusCode.NOT_FOUND)
                 context.set_details(error_msg)
                 return pb2.MassListResponse()           
-            ms_list = raw_data_process.extract_mass_list_percentile(request.spectra_path, low_percentile=request.low_percentile,high_percentile=request.high_percentile)
+            try:
+                params = assign_module.AssignParams.from_request(request)
+            except ValueError as e:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details(str(e))
+                return pb2.MassListResponse()
+
+            # 0 = не задано → значения по умолчанию функции
+            percentile_kwargs = {}
+            if request.low_percentile > 0:
+                percentile_kwargs['low_percentile'] = request.low_percentile
+            if request.high_percentile > 0:
+                percentile_kwargs['high_percentile'] = request.high_percentile
+            ms_list = raw_data_process.extract_mass_list_percentile(request.spectra_path, **percentile_kwargs)
             
             if ms_list is None or len(ms_list) == 0:
                 error_msg = f"No data extracted from {request.spectra_path} (empty mass list), params: {request.low_percentile}, {request.high_percentile}"
@@ -76,11 +86,25 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
             
             logging.info(f"Extracted {len(ms_list)} mass peaks")
                         
-            ms_spectra = assign_module.process_non_tmds(ms_list, request.spectra_name)
+            ms_spectra = assign_module.process(ms_list, request.spectra_name, params)
 
-            fig = plot_service.plot_preview(ms_spectra=ms_spectra,dpi=request.dpi, width=request.width,height=request.height)
-            fmt = plot_service.format_map.get(request.format, 'png')
-            image_bytes = plot_service._fig_to_bytes(fig, format=fmt, dpi=request.dpi)
+            if ms_spectra is None or len(ms_spectra) == 0:
+                error_msg = (f"No formulas assigned for {request.spectra_name} "
+                             f"(protocol={params.protocol}, rel_error={params.rel_error}, "
+                             f"brutto={params.brutto_dict})")
+                logging.error(error_msg)
+                context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                context.set_details(error_msg)
+                return pb2.MassListResponse()
+
+            fig = plot_service.plot_preview(
+                ms_spectra=ms_spectra,
+                dpi=request.dpi or 100,
+                width=request.width or 10,
+                height=request.height or 6,
+            )
+            fmt = plot_service.format_map.get((request.format or 'png').lower(), 'png')
+            image_bytes = plot_service._fig_to_bytes(fig, format=fmt, dpi=request.dpi or 100)
             plt.close(fig)
             
             
@@ -98,7 +122,7 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
                 size_bytes=len(image_bytes),
                 mime_type=mime_types.get(fmt, 'image/png'),
                 generated_at=int(datetime.now().timestamp()),
-                spectrum=df_to_proto(ms_spectra)
+                spectrum=df_to_proto(ms_spectra.reset_index(drop=True))
             )
             
         except Exception as e:

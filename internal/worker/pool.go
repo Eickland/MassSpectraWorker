@@ -2,6 +2,7 @@ package worker
 
 import (
 	"MassSpectraWorker/internal/client"
+	"MassSpectraWorker/internal/config"
 	"MassSpectraWorker/internal/model"
 	"MassSpectraWorker/internal/repository"
 	"bytes"
@@ -16,8 +17,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"MassSpectraWorker/internal/config"
 
 	"github.com/google/uuid"
 
@@ -35,8 +34,8 @@ type WorkerPool struct {
 	cfg          config.Config
 }
 
-func NewWorkerPool(repo *repository.JobRepository,
-	pythonClient *client.GRPCClient, workers int) *WorkerPool {
+func NewWorkerPool(repo *repository.JobRepository, pythonClient *client.GRPCClient,
+	workers int, cfg config.Config) *WorkerPool {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &WorkerPool{
@@ -46,9 +45,8 @@ func NewWorkerPool(repo *repository.JobRepository,
 		jobs:         make(chan uuid.UUID, 100),
 		ctx:          ctx,
 		cancel:       cancel,
-		cfg:          config.LoadConfig(),
+		cfg:          cfg,
 	}
-
 }
 
 // Start - запуск воркеров
@@ -60,17 +58,28 @@ func (p *WorkerPool) Start() {
 	log.Printf("Worker pool started with %d workers", p.workers)
 }
 
-// Stop - остановка воркеров
+// Stop - остановка воркеров. Текущие элементы прерываются и возвращаются
+// в очередь; при следующем запуске RecoverInterrupted их подхватит.
 func (p *WorkerPool) Stop() {
 	p.cancel()
-	close(p.jobs)
 	p.wg.Wait()
 	log.Println("Worker pool stopped")
 }
 
-// Submit - отправка задачи на обработку
+// Submit - отправка задачи на обработку. Не блокирует HTTP-хендлер,
+// даже если очередь заполнена.
 func (p *WorkerPool) Submit(jobID uuid.UUID) {
-	p.jobs <- jobID
+	select {
+	case p.jobs <- jobID:
+	case <-p.ctx.Done():
+	default:
+		go func() {
+			select {
+			case p.jobs <- jobID:
+			case <-p.ctx.Done():
+			}
+		}()
+	}
 }
 
 // worker - основной цикл воркера
@@ -83,173 +92,195 @@ func (p *WorkerPool) worker(id int) {
 		case <-p.ctx.Done():
 			log.Printf("Worker %d stopped", id)
 			return
-
-		case jobID, ok := <-p.jobs:
-			if !ok {
-				return
-			}
+		case jobID := <-p.jobs:
 			log.Printf("Worker %d processing job %s", id, jobID)
 			p.processJob(jobID)
 		}
 	}
 }
 
-func (p *WorkerPool) spectrumPath(jobID uuid.UUID, spectraName string) (string, error) {
-	base := strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
-	// формат хранения спектра — CSV или Parquet
-	ext := ".csv" // или ".parquet" — см. п.4
-	return filepath.Join(p.cfg.ResultsDir, jobID.String(), base+"_spectrum"+ext), nil
-}
-
 // processJob - обработка одной задачи
 func (p *WorkerPool) processJob(jobID uuid.UUID) {
-	// Обновляем статус задачи на running
-	if err := p.repo.UpdateJobStatus(jobID, "running"); err != nil {
-		log.Printf("Failed to update job status to running: %v", err)
+	job, err := p.repo.GetJobByID(jobID)
+	if err != nil {
+		log.Printf("job %s: load failed: %v", jobID, err)
+		return
+	}
+	if job.IsTerminal() {
+		return
+	}
+	if job.Status == model.JobCancelling {
+		p.finishCancelled(jobID)
+		return
+	}
+	if err := p.repo.StartJob(jobID); err != nil {
+		log.Printf("job %s: failed to set running: %v", jobID, err)
 		return
 	}
 
-	var doneItems, failedItems int
-
-	// Обрабатываем элементы по одному
 	for {
-		// Проверяем, не отменена ли задача
-		cancelled, err := p.repo.IsJobCancelled(jobID)
-		if err != nil {
-			log.Printf("Failed to check cancellation: %v", err)
-			break
-		}
-		if cancelled {
-			p.repo.UpdateJobStatus(jobID, "cancelled")
-			log.Printf("Job %s cancelled", jobID)
+		if p.ctx.Err() != nil {
+			// Сервер останавливается: задача остаётся running и будет
+			// продолжена при следующем запуске
 			return
 		}
 
-		// Забираем следующий элемент для обработки
-		items, err := p.repo.GetPendingItems(jobID, 1)
+		cancelled, err := p.repo.IsJobCancelled(jobID)
 		if err != nil {
-			log.Printf("Failed to get pending items: %v", err)
-			time.Sleep(time.Second)
+			log.Printf("job %s: failed to check cancellation: %v", jobID, err)
+			return
+		}
+		if cancelled {
+			p.finishCancelled(jobID)
+			return
+		}
+
+		item, err := p.repo.ClaimNextItem(jobID)
+		if err != nil {
+			log.Printf("job %s: failed to claim item: %v", jobID, err)
+			if !p.sleep(time.Second) {
+				return
+			}
 			continue
 		}
-
-		if len(items) == 0 {
-			// Нет больше элементов
-			break
+		if item == nil {
+			break // элементов больше нет
 		}
 
-		item := items[0]
+		procErr := p.processItem(job, item)
 
-		err = p.processItem(&item)
-		if err != nil {
-			log.Printf("item %s FAILED: %v", item.ID, err)
-			item.Status = "failed"
-			item.Error = new(err.Error())
-			failedItems++
+		if procErr != nil && p.ctx.Err() != nil {
+			// Прервано остановкой сервера, а не ошибкой обработки
+			if err := p.repo.ResetItemToPending(item.ID); err != nil {
+				log.Printf("item %s: reset failed: %v", item.ID, err)
+			}
+			return
+		}
+
+		if procErr != nil {
+			log.Printf("item %s (%s) FAILED: %v", item.ID, item.SpectraName, procErr)
+			msg := procErr.Error()
+			item.Status = model.ItemFailed
+			item.Error = &msg
 		} else {
-			item.Status = "done"
-			doneItems++
+			item.Status = model.ItemDone
+			item.Error = nil
 		}
 
-		if err != nil {
-			item.Status = "failed"
-			item.Error = new(err.Error())
-			failedItems++
-		} else {
-			item.Status = "done"
-			doneItems++
+		if err := p.repo.UpdateItemResult(*item); err != nil {
+			log.Printf("item %s: failed to save result: %v", item.ID, err)
 		}
-
-		if updateErr := p.repo.UpdateItemResult(item); updateErr != nil {
-			log.Printf("Failed to update item: %v", updateErr)
+		if _, err := p.repo.RecountJob(jobID); err != nil {
+			log.Printf("job %s: failed to update counters: %v", jobID, err)
 		}
-
-		if err := p.repo.UpdateJobCounters(jobID, doneItems, failedItems); err != nil {
-			log.Printf("Failed to update job counters: %v", err)
-		}
-
-		// Небольшая задержка, чтобы не перегружать БД
-		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Определяем финальный статус
-	//totalItems := doneItems + failedItems
-	if failedItems > 0 && doneItems == 0 {
-		p.repo.UpdateJobStatus(jobID, "failed")
-	} else if failedItems > 0 && doneItems > 0 {
-		p.repo.UpdateJobStatus(jobID, "failed") // или "partial" если нужно
-	} else {
-		p.repo.UpdateJobStatus(jobID, "done")
+	p.finishJob(jobID)
+}
+
+// finishJob - выставляет итоговый статус, если все элементы обработаны
+func (p *WorkerPool) finishJob(jobID uuid.UUID) {
+	c, err := p.repo.RecountJob(jobID)
+	if err != nil {
+		log.Printf("job %s: recount failed: %v", jobID, err)
+		return
+	}
+	if c.Pending > 0 || c.Processing > 0 {
+		// Элементы ещё обрабатывает другой воркер — он и завершит задачу
+		return
 	}
 
-	log.Printf("Job %s finished: done=%d, failed=%d", jobID, doneItems, failedItems)
+	// Отмену могли запросить, пока обрабатывался последний элемент
+	if cancelled, _ := p.repo.IsJobCancelled(jobID); cancelled {
+		p.finishCancelled(jobID)
+		return
+	}
+
+	status := model.JobDone
+	if c.Failed > 0 {
+		// Фронтенд показывает failed как «Завершено с ошибками»
+		status = model.JobFailed
+	}
+	if err := p.repo.UpdateJobStatus(jobID, status); err != nil {
+		log.Printf("job %s: failed to set final status: %v", jobID, err)
+	}
+	log.Printf("Job %s finished: done=%d, failed=%d", jobID, c.Done, c.Failed)
+}
+
+func (p *WorkerPool) finishCancelled(jobID uuid.UUID) {
+	if err := p.repo.CancelPendingItems(jobID); err != nil {
+		log.Printf("job %s: failed to cancel items: %v", jobID, err)
+	}
+	c, err := p.repo.RecountJob(jobID)
+	if err != nil {
+		log.Printf("job %s: recount failed: %v", jobID, err)
+		return
+	}
+	if c.Processing > 0 {
+		// Другой воркер ещё дорабатывает спектр: задача остаётся cancelling,
+		// он сам завершит её после сохранения результата
+		return
+	}
+	if err := p.repo.UpdateJobStatus(jobID, model.JobCancelled); err != nil {
+		log.Printf("job %s: failed to set cancelled: %v", jobID, err)
+	}
+	log.Printf("Job %s cancelled", jobID)
+}
+
+// sleep - пауза, прерываемая остановкой пула. false — пул остановлен.
+func (p *WorkerPool) sleep(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-p.ctx.Done():
+		return false
+	}
 }
 
 // processItem - обработка одного элемента (спектра)
-func (p *WorkerPool) processItem(item *model.JobItem) error {
-
-	log.Printf("Processing item %s (%s)", item.ID, item.SpectraName)
+func (p *WorkerPool) processItem(job *model.Job, item *model.JobItem) error {
 	kind := detectInputKind(item.SpectraPath)
-	log.Printf("processItem: path=%q kind=%q", item.SpectraPath, kind)
-
-	cancelled, err := p.repo.IsJobCancelled(item.JobID)
-	if err != nil {
-		return err
-	}
-	if cancelled {
-		return fmt.Errorf("job cancelled before processing")
-	}
-
-	job, err := p.repo.GetJobByID(item.JobID)
-	if err != nil {
-		return fmt.Errorf("failed to get job: %w", err)
-	}
-
-	kind = detectInputKind(item.SpectraPath) // "mzml" | "d" | "unknown"
+	log.Printf("Processing item %s (%s), kind=%s", item.ID, item.SpectraName, kind)
 
 	var mzmlPath string
 	switch kind {
 	case "mzml":
 		mzmlPath = item.SpectraPath
-	case "d":
+	case "d", "raw", "mzxml":
 		mzmlPath = p.mzmlCachePath(item.JobID, item.SpectraName)
-		info, statErr := os.Stat(mzmlPath)
-		log.Printf("d-branch: src=%q dst=%q statErr=%v statInfo=%v",
-			item.SpectraPath, mzmlPath, statErr, info)
-
-		if statErr != nil {
-			// файла нет — конвертируем
-			if err := p.convertDToMzML(item.SpectraPath, mzmlPath); err != nil {
-				return fmt.Errorf("convert .d → .mzML: %w", err)
-			}
-		}
-		log.Printf("d-branch: src=%q dst=%q exists_before=%v",
-			item.SpectraPath, mzmlPath, fileExists(mzmlPath))
-
 		if !fileExists(mzmlPath) {
-			log.Printf("d-branch: running msconvert...")
-			if err := p.convertDToMzML(item.SpectraPath, mzmlPath); err != nil {
-				return fmt.Errorf("convert .d → .mzML: %w", err)
+			if err := p.convertToMzML(item.SpectraPath, mzmlPath); err != nil {
+				return fmt.Errorf("convert %s → .mzML: %w", kind, err)
 			}
-			log.Printf("d-branch: msconvert done, exists_after=%v", fileExists(mzmlPath))
 		}
+	case "missing":
+		return fmt.Errorf("file not found: %s", item.SpectraPath)
 	default:
 		return fmt.Errorf("unsupported input: %s", item.SpectraPath)
 	}
 
+	params := job.Params
+	params.ApplyDefaults()
+
 	req := &pb.MassListRequest{
 		SpectraPath:    mzmlPath,
 		SpectraName:    item.SpectraName,
-		LowPercentile:  job.Params.LowPercentile,
-		HighPercentile: job.Params.HighPercentile,
-		RelError:       job.Params.RelError,
-		Dpi:            job.Params.Dpi,
-		Width:          job.Params.Width,
-		Height:         job.Params.Height,
-		Format:         job.Params.OutputFormat,
+		LowPercentile:  params.LowPercentile,
+		HighPercentile: params.HighPercentile,
+		RelError:       params.RelError,
+		ChargeMax:      params.ChargeMax,
+		BruttoDict:     params.BruttoDict.ToProto(),
+		Protocole:      params.Protocol,
+		Options:        params.Options,
+		Dpi:            params.Dpi,
+		Width:          params.Width,
+		Height:         params.Height,
+		Format:         params.OutputFormat,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(p.ctx, p.cfg.GRPCTimeout)
 	defer cancel()
 
 	resp, err := p.pythonClient.ProcessMassList(ctx, req)
@@ -257,24 +288,21 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 		return fmt.Errorf("python processing failed: %w", err)
 	}
 
-	// 4a. Сохраняем картинку
-	plotPath := p.resultPath(item.JobID, item.SpectraName)
-	if err := p.saveResult(plotPath, resp.ImageData); err != nil {
+	// Сохраняем картинку (расширение — по фактическому формату ответа)
+	format := resp.GetFormat()
+	if format == "" {
+		format = params.OutputFormat
+	}
+	plotPath := p.resultPath(item.JobID, item.SpectraName, format)
+	if err := saveResult(plotPath, resp.ImageData); err != nil {
 		return fmt.Errorf("failed to save plot: %w", err)
 	}
+	item.ResultPath = &plotPath
 
-	// 4b. Сохраняем спектр (если пришёл)
-	var spectrumPath *string
-	var spectrumRows, spectrumCols *int
-	var spectrumSize *int64
-
+	// Сохраняем таблицу спектра (если пришла)
 	if resp.Spectrum != nil && resp.Spectrum.NRows > 0 {
-		sp, err := p.spectrumPath(item.JobID, item.SpectraName)
-		if err != nil {
-			return fmt.Errorf("failed to save spectrum: %w", err)
-		}
-
-		if err := p.saveSpectrumCSV(sp, resp.Spectrum); err != nil {
+		sp := p.spectrumPath(item.JobID, item.SpectraName)
+		if err := saveSpectrumCSV(sp, resp.Spectrum); err != nil {
 			return fmt.Errorf("failed to save spectrum: %w", err)
 		}
 		info, err := os.Stat(sp)
@@ -282,80 +310,95 @@ func (p *WorkerPool) processItem(item *model.JobItem) error {
 			return fmt.Errorf("failed to stat spectrum: %w", err)
 		}
 		size := info.Size()
-
 		rows := int(resp.Spectrum.NRows)
 		cols := int(resp.Spectrum.NCols)
-		spectrumPath = &sp
-		spectrumRows = &rows
-		spectrumCols = &cols
-		spectrumSize = &size
+		item.SpectrumPath = &sp
+		item.SpectrumRows = &rows
+		item.SpectrumCols = &cols
+		item.SpectrumSize = &size
 	}
 
-	// 5. Одним вызовом обновляем item: статус + пути + метаданные
-	item.Status = "done"
-	item.ResultPath = &plotPath
-	item.SpectrumPath = spectrumPath
-	item.SpectrumRows = spectrumRows
-	item.SpectrumCols = spectrumCols
-	item.SpectrumSize = spectrumSize
-
-	log.Printf("Item %s processed: plot=%d bytes, spectrum_rows=%v",
-		item.ID, len(resp.ImageData), resp.Spectrum.GetNRows())
+	log.Printf("Item %s processed: plot=%d bytes, spectrum_rows=%d",
+		item.ID, len(resp.ImageData), resp.GetSpectrum().GetNRows())
 	return nil
 }
 
 // saveResult - сохраняет бинарные данные в файл
-func (p *WorkerPool) saveResult(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+func saveResult(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
-func (p *WorkerPool) resultPath(jobID uuid.UUID, spectraName string) string {
-	base := strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
-	return filepath.Join(p.cfg.ResultsDir, jobID.String(), base+".png")
+func baseName(spectraName string) string {
+	return strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
+}
+
+func (p *WorkerPool) resultPath(jobID uuid.UUID, spectraName, format string) string {
+	ext := strings.ToLower(format)
+	if ext == "jpeg" {
+		ext = "jpg"
+	}
+	return filepath.Join(p.cfg.ResultsDir, jobID.String(), baseName(spectraName)+"."+ext)
+}
+
+func (p *WorkerPool) spectrumPath(jobID uuid.UUID, spectraName string) string {
+	return filepath.Join(p.cfg.ResultsDir, jobID.String(), baseName(spectraName)+"_spectrum.csv")
 }
 
 func (p *WorkerPool) mzmlCachePath(jobID uuid.UUID, spectraName string) string {
-	base := strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
-	return filepath.Join(p.cfg.WorkDir, jobID.String(), base+".mzML")
+	return filepath.Join(p.cfg.WorkDir, jobID.String(), baseName(spectraName)+".mzML")
 }
 
-func (p *WorkerPool) saveSpectrumCSV(path string, t *pb.MassSpectrumTable) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+func saveSpectrumCSV(path string, t *pb.MassSpectrumTable) (err error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
 
 	w := csv.NewWriter(f)
-	defer w.Flush()
 
-	// заголовок
 	header := make([]string, 0, len(t.Columns))
-	for _, c := range t.Columns {
+	nulls := make([]map[int]bool, len(t.Columns))
+	for j, c := range t.Columns {
 		header = append(header, c.Name)
+		if len(c.NullMask) > 0 {
+			m := make(map[int]bool, len(c.NullMask))
+			for _, idx := range c.NullMask {
+				m[int(idx)] = true
+			}
+			nulls[j] = m
+		}
 	}
 	if err := w.Write(header); err != nil {
 		return err
 	}
 
-	// строки
 	rows := int(t.NRows)
+	row := make([]string, len(t.Columns))
 	for i := 0; i < rows; i++ {
-		row := make([]string, len(t.Columns))
 		for j, c := range t.Columns {
+			if nulls[j][i] {
+				row[j] = "" // NaN/None: Python кладёт 0 в данные и индекс в null_mask
+				continue
+			}
 			row[j] = columnValueAt(c, i)
 		}
 		if err := w.Write(row); err != nil {
 			return err
 		}
 	}
-	return nil
+	w.Flush()
+	return w.Error()
 }
 
 func columnValueAt(c *pb.Column, i int) string {
@@ -380,36 +423,52 @@ func columnValueAt(c *pb.Column, i int) string {
 	return ""
 }
 
+// detectInputKind - "mzml" | "mzxml" | "d" | "raw" | "missing" | "unknown"
 func detectInputKind(path string) string {
 	info, err := os.Stat(path)
 	if err != nil {
-		return "unknown"
+		return "missing"
 	}
+	ext := strings.ToLower(filepath.Ext(path))
 	if info.IsDir() {
-		// .d — это директория, обычно с расширением .d на конце
-		if strings.HasSuffix(strings.ToLower(path), ".d") {
-			return "d"
+		switch ext {
+		case ".d":
+			return "d" // Bruker/Agilent
+		case ".raw":
+			return "raw" // Waters
 		}
 		return "unknown"
 	}
-	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".mzml":
 		return "mzml"
 	case ".mzxml":
-		return "mzxml" // ProteoWizard тоже умеет
+		return "mzxml"
+	case ".raw":
+		return "raw" // Thermo
 	}
 	return "unknown"
 }
 
-func (p *WorkerPool) convertDToMzML(src, dst string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), p.cfg.ConvertTimeout)
+func (p *WorkerPool) convertToMzML(src, dst string) error {
+	if p.cfg.MsConvert == "" {
+		return fmt.Errorf("MSCONVERT_PATH is not set")
+	}
+	ctx, cancel := context.WithTimeout(p.ctx, p.cfg.ConvertTimeout)
 	defer cancel()
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+
+	// Конвертируем во временную папку и только потом переносим результат:
+	// прерванная конвертация не оставит недописанный .mzML в кэше,
+	// а имя выходного файла msconvert (по имени исходника) может не совпадать
+	// с именем элемента, заданным пользователем.
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
-
-	outDir := filepath.Dir(dst)
+	outDir, err := os.MkdirTemp(filepath.Dir(dst), ".converting-")
+	if err != nil {
+		return fmt.Errorf("mkdir temp: %w", err)
+	}
+	defer os.RemoveAll(outDir)
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, p.cfg.MsConvert,
@@ -425,16 +484,22 @@ func (p *WorkerPool) convertDToMzML(src, dst string) error {
 			err, stdout.String(), stderr.String())
 	}
 
-	if !fileExists(dst) {
-		// список файлов в outDir — чтобы понять, что реально создалось
-		entries, _ := os.ReadDir(outDir)
-		var names []string
-		for _, e := range entries {
-			names = append(names, e.Name())
+	entries, _ := os.ReadDir(outDir)
+	var produced []string
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+		if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".mzml") {
+			produced = append(produced, filepath.Join(outDir, e.Name()))
 		}
+	}
+	if len(produced) != 1 {
 		return fmt.Errorf(
-			"msconvert exit 0 but %q not found; files in %q: %v\nstdout:\n%s\nstderr:\n%s",
-			dst, outDir, names, stdout.String(), stderr.String())
+			"msconvert exit 0 but expected exactly one .mzML, files in %q: %v\nstdout:\n%s\nstderr:\n%s",
+			outDir, names, stdout.String(), stderr.String())
+	}
+	if err := os.Rename(produced[0], dst); err != nil {
+		return fmt.Errorf("move converted file: %w", err)
 	}
 	return nil
 }

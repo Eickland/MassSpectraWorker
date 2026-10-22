@@ -1,10 +1,9 @@
-massspectraworkerdb
-kirill
-2175
+База данных: SQLite (PostgreSQL больше не нужен)
 
-Удаление бд:
-sudo -u postgres psql
-DROP DATABASE massspectraworkerdb;
-CREATE DATABASE massspectraworkerdb OWNER kirill;
-Применить миграцию:
-migrate -path ./migrations         -database "postgres://kirill:21754@localhost:5432/massspectraworkerdb?sslmode=disable"         up
+Файл БД: путь из DB_PATH в .env (по умолчанию ./data/massspectra.db).
+Таблицы создаются и мигрируются автоматически при запуске сервера
+(миграции: migrations/*.up.sql, текущая версия схемы хранится в PRAGMA user_version).
+
+Сбросить БД: остановить сервер и удалить data/massspectra.db (и *.db-wal, *.db-shm рядом).
+Посмотреть содержимое: любой просмотрщик SQLite, например DB Browser for SQLite,
+или sqlite3 data/massspectra.db "SELECT status, count(*) FROM batch_jobs GROUP BY status;"

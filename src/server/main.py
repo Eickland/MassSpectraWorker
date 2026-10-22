@@ -6,7 +6,12 @@ from src.protobuf import plot_pb2 as pb2
 from src.protobuf import plot_pb2_grpc as pb2_grpc
 from grpc_reflection.v1alpha import reflection
 
-import servicer
+try:
+    # запуск как модуля из корня проекта: python -m src.server.main
+    from src.server import servicer
+except ImportError:
+    # запуск как скрипта: python src/server/main.py
+    import servicer  # type: ignore
 
 
 

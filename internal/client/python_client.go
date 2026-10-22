@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -27,17 +28,24 @@ type GRPCClient struct {
 	mu     sync.RWMutex
 }
 
+// DefaultAddr - адрес Python-сервиса (переопределяется GRPC_ADDR)
+const DefaultAddr = "localhost:50051"
+
 // GetClient - возвращает единственный экземпляр клиента
 func GetClient() (*GRPCClient, error) {
 	var err error
 	once.Do(func() {
-		instance, err = newGRPCClient()
+		addr := os.Getenv("GRPC_ADDR")
+		if addr == "" {
+			addr = DefaultAddr
+		}
+		instance, err = NewClient(addr)
 	})
 	return instance, err
 }
 
-// newGRPCClient - создает новый gRPC клиент
-func newGRPCClient() (*GRPCClient, error) {
+// NewClient - создает новый gRPC клиент к указанному адресу
+func NewClient(addr string) (*GRPCClient, error) {
 	// Настройки keepalive для постоянного соединения
 	keepaliveParams := keepalive.ClientParameters{
 		Time:                10 * time.Second, // ping каждые 10 секунд
@@ -47,7 +55,7 @@ func newGRPCClient() (*GRPCClient, error) {
 
 	// Создаем соединение с сервером
 	conn, err := grpc.NewClient(
-		"localhost:50051",
+		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepaliveParams),
 		grpc.WithDefaultCallOptions(
@@ -64,7 +72,7 @@ func newGRPCClient() (*GRPCClient, error) {
 		client: pb.NewMassListServiceClient(conn),
 	}
 
-	log.Println("✅ gRPC client connected to localhost:50051")
+	log.Printf("✅ gRPC client configured for %s", addr)
 	return client, nil
 }
 

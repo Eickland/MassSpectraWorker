@@ -1,5 +1,4 @@
-ALTER TABLE batch_job_items
-  ADD COLUMN spectrum_path TEXT,
-  ADD COLUMN spectrum_rows INT,
-  ADD COLUMN spectrum_cols INT,
-  ADD COLUMN spectrum_size BIGINT;
+ALTER TABLE batch_job_items ADD COLUMN spectrum_path TEXT;
+ALTER TABLE batch_job_items ADD COLUMN spectrum_rows INTEGER;
+ALTER TABLE batch_job_items ADD COLUMN spectrum_cols INTEGER;
+ALTER TABLE batch_job_items ADD COLUMN spectrum_size INTEGER;

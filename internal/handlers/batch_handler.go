@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"MassSpectraWorker/internal/model"
+	"MassSpectraWorker/internal/repository"
 	"MassSpectraWorker/internal/service"
 	"archive/zip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -49,6 +51,7 @@ func (h *BatchHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Валидация параметров
+	req.Params.ApplyDefaults()
 	if err := req.Params.Validate(); err != nil {
 		http.Error(w, "Invalid params: "+err.Error(), http.StatusBadRequest)
 		return
@@ -61,7 +64,7 @@ func (h *BatchHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 	if req.FolderPath != nil && *req.FolderPath != "" {
 		job, err = h.service.CreateJobFromFolder(*req.FolderPath, req.Params)
 		if err != nil {
-			http.Error(w, "Failed to create job from folder: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Failed to create job from folder: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 	} else if len(req.Items) > 0 {
@@ -103,12 +106,30 @@ func (h *BatchHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 
 	progress, err := h.service.GetJobProgress(jobID)
 	if err != nil {
-		http.Error(w, "Job not found", http.StatusNotFound)
+		writeLookupError(w, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(progress)
+}
+
+// writeLookupError - 404 для отсутствующей задачи, 500 для прочих ошибок
+func writeLookupError(w http.ResponseWriter, err error) {
+	if errors.Is(err, repository.ErrNotFound) {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+	log.Printf("batch: %v", err)
+	http.Error(w, "Internal error: "+err.Error(), http.StatusInternalServerError)
+}
+
+// resultURL - URL картинки результата для галереи
+func resultURL(it model.JobItem) string {
+	if it.ResultPath == nil || *it.ResultPath == "" {
+		return ""
+	}
+	return "/results/" + path.Join(it.JobID.String(), filepath.Base(*it.ResultPath))
 }
 
 // GetJobItems - GET /api/batch/{job_id}/items
@@ -129,9 +150,13 @@ func (h *BatchHandler) GetJobItems(w http.ResponseWriter, r *http.Request) {
 		limit = 20
 	}
 
+	if _, err := h.service.GetJob(jobID); err != nil {
+		writeLookupError(w, err)
+		return
+	}
 	items, err := h.service.GetJobItems(jobID)
 	if err != nil {
-		http.Error(w, "Job not found", http.StatusNotFound)
+		writeLookupError(w, err)
 		return
 	}
 
@@ -147,6 +172,11 @@ func (h *BatchHandler) GetJobItems(w http.ResponseWriter, r *http.Request) {
 		items = []model.JobItem{}
 	} else {
 		items = items[start:end]
+	}
+	for i := range items {
+		if items[i].Status == model.ItemDone {
+			items[i].ResultURL = resultURL(items[i])
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -170,9 +200,12 @@ func (h *BatchHandler) GetJobEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.service.GetJob(jobID); err != nil {
-		http.Error(w, "Job not found", http.StatusNotFound)
+		writeLookupError(w, err)
 		return
 	}
+
+	// SSE-соединение живёт дольше WriteTimeout сервера — снимаем дедлайн
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -188,7 +221,11 @@ func (h *BatchHandler) GetJobEvents(w http.ResponseWriter, r *http.Request) {
 	go h.observeJobEvents(jobID, eventChan, r.Context().Done())
 
 	// ---- init ----
-	progress, _ := h.service.GetJobProgress(jobID)
+	progress, err := h.service.GetJobProgress(jobID)
+	if err != nil {
+		writeLookupError(w, err)
+		return
+	}
 	items, _ := h.service.GetJobItems(jobID)
 
 	type initItem struct {
@@ -198,26 +235,22 @@ func (h *BatchHandler) GetJobEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	initial := make([]initItem, 0, len(items))
 	for _, it := range items {
-
-		if it.Status == "done" && it.ResultPath != nil {
+		if url := resultURL(it); it.Status == model.ItemDone && url != "" {
 			initial = append(initial, initItem{
 				ID:          it.ID.String(),
 				SpectraName: it.SpectraName,
-				ResultURL:   "/results/" + path.Join(it.JobID.String(), path.Base(*it.ResultPath)),
+				ResultURL:   url,
 			})
 		}
 	}
 
-	initPayload := map[string]interface{}{
-		"status":  progress.Status,
-		"total":   progress.TotalItems,
-		"done":    progress.DoneItems,
-		"failed":  progress.FailedItems,
-		"results": initial,
-	}
+	// Поля совпадают с JobProgress, чтобы фронтенд мог передать их в applyProgress
 	data, _ := json.Marshal(map[string]interface{}{
 		"event": "init",
-		"data":  initPayload,
+		"data": struct {
+			*model.JobProgress
+			Results []initItem `json:"results"`
+		}{progress, initial},
 	})
 	fmt.Fprintf(w, "data: %s\n\n", data)
 	flusher.Flush()
@@ -245,18 +278,24 @@ func (h *BatchHandler) observeJobEvents(jobID uuid.UUID, eventChan chan<- string
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	seen := make(map[uuid.UUID]struct{}) // уже отправленные items
-	lastStatus := ""
+	seen := make(map[uuid.UUID]struct{}) // элементы, о которых уже сообщили
 
-	// Отправляем всё, что уже было done к моменту подключения
+	// Готовые к моменту подключения элементы уже ушли в init
 	if items, err := h.service.GetJobItems(jobID); err == nil {
 		for _, it := range items {
-			if it.Status != "done" || it.ResultPath == nil {
-				continue
-			}
-			if it.Status == "done" {
+			if it.Status == model.ItemDone || it.Status == model.ItemFailed {
 				seen[it.ID] = struct{}{}
 			}
+		}
+	}
+
+	send := func(event string, payload interface{}) bool {
+		data, _ := json.Marshal(payload)
+		select {
+		case eventChan <- fmt.Sprintf("event: %s\ndata: %s", event, data):
+			return true
+		case <-done:
+			return false
 		}
 	}
 
@@ -271,7 +310,7 @@ func (h *BatchHandler) observeJobEvents(jobID uuid.UUID, eventChan chan<- string
 			}
 
 			for _, it := range items {
-				if it.Status != "done" {
+				if it.Status != model.ItemDone && it.Status != model.ItemFailed {
 					continue
 				}
 				if _, ok := seen[it.ID]; ok {
@@ -279,45 +318,39 @@ func (h *BatchHandler) observeJobEvents(jobID uuid.UUID, eventChan chan<- string
 				}
 				seen[it.ID] = struct{}{}
 
-				url := "/results/" + path.Join(jobID.String(), path.Base(*it.ResultPath))
-				payload := map[string]interface{}{
+				if it.Status == model.ItemFailed {
+					errMsg := ""
+					if it.Error != nil {
+						errMsg = *it.Error
+					}
+					if !send("item_failed", map[string]interface{}{
+						"item_id":      it.ID.String(),
+						"spectra_name": it.SpectraName,
+						"error":        errMsg,
+					}) {
+						return
+					}
+					continue
+				}
+
+				if !send("item_done", map[string]interface{}{
 					"item_id":      it.ID.String(),
 					"spectra_name": it.SpectraName,
-					"result_url":   url,
-				}
-				data, _ := json.Marshal(payload)
-				select {
-				case eventChan <- fmt.Sprintf("event: item_done\ndata: %s", data):
-				case <-done:
+					"result_url":   resultURL(it),
+				}) {
 					return
 				}
 			}
 
-			// Финальный статус — как было, но добавим список результатов
 			progress, err := h.service.GetJobProgress(jobID)
 			if err != nil {
 				continue
 			}
-
-			// Проверяем изменения
-			if progress.Status != lastStatus {
-				lastStatus = progress.Status
-				if progress.Status == "done" || progress.Status == "failed" || progress.Status == "cancelled" {
-					payload := map[string]interface{}{
-						"job_id": jobID.String(),
-						"status": progress.Status,
-						"total":  progress.TotalItems,
-						"done":   progress.DoneItems,
-						"failed": progress.FailedItems,
-					}
-					data, _ := json.Marshal(payload)
-					select {
-					case eventChan <- fmt.Sprintf("event: job_done\ndata: %s", data):
-					case <-done:
-						return
-					}
-					return
-				}
+			if progress.Status == model.JobDone || progress.Status == model.JobFailed ||
+				progress.Status == model.JobCancelled {
+				// Фронтенд ждёт {data: JobProgress}
+				send("job_done", map[string]interface{}{"data": progress})
+				return
 			}
 		}
 	}
@@ -331,9 +364,13 @@ func (h *BatchHandler) GetJobResultsZip(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if _, err := h.service.GetJob(jobID); err != nil {
+		writeLookupError(w, err)
+		return
+	}
 	files, err := h.service.GetJobResults(jobID)
 	if err != nil {
-		http.Error(w, "Job not found", http.StatusNotFound)
+		writeLookupError(w, err)
 		return
 	}
 	if len(files) == 0 {
@@ -429,7 +466,14 @@ func (h *BatchHandler) CancelJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.CancelJob(jobID); err != nil {
-		http.Error(w, "Failed to cancel job: "+err.Error(), http.StatusBadRequest)
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			http.Error(w, "Job not found", http.StatusNotFound)
+		case errors.Is(err, service.ErrJobFinished):
+			http.Error(w, "Job already finished", http.StatusConflict)
+		default:
+			http.Error(w, "Failed to cancel job: "+err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 

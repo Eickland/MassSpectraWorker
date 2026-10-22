@@ -1,28 +1,29 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
+-- SQLite: UUID хранятся как TEXT, JSON как TEXT, время как DATETIME (ISO-8601).
 CREATE TABLE batch_jobs (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  status        TEXT NOT NULL DEFAULT 'pending',
+  id            TEXT PRIMARY KEY,
+  status        TEXT NOT NULL DEFAULT 'pending', -- pending | running | cancelling | cancelled | done | failed
   source_folder TEXT,
-  params_json   JSONB NOT NULL,
-  total_items   INT NOT NULL DEFAULT 0,
-  done_items    INT NOT NULL DEFAULT 0,
-  failed_items  INT NOT NULL DEFAULT 0,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  finished_at   TIMESTAMPTZ
+  params_json   TEXT NOT NULL,                   -- JSON с параметрами обработки (model.JobParams)
+  total_items   INTEGER NOT NULL DEFAULT 0,
+  done_items    INTEGER NOT NULL DEFAULT 0,
+  failed_items  INTEGER NOT NULL DEFAULT 0,
+  created_at    DATETIME NOT NULL,
+  finished_at   DATETIME
 );
 
 CREATE TABLE batch_job_items (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  job_id        UUID NOT NULL REFERENCES batch_jobs(id) ON DELETE CASCADE,
+  id            TEXT PRIMARY KEY,
+  job_id        TEXT NOT NULL REFERENCES batch_jobs(id) ON DELETE CASCADE,
   spectra_name  TEXT NOT NULL,
   spectra_path  TEXT NOT NULL,
-  status        TEXT NOT NULL DEFAULT 'pending',
-  result_path   TEXT,
+  status        TEXT NOT NULL DEFAULT 'pending', -- pending | processing | done | failed | cancelled
+  result_path   TEXT,                            -- путь к картинке
   error         TEXT,
   file_hash     TEXT,
-  created_at    TIMESTAMPTZ,
-  finished_at   TIMESTAMPTZ
+  created_at    DATETIME NOT NULL,
+  started_at    DATETIME,
+  finished_at   DATETIME
 );
 
-CREATE INDEX idx_batch_job_items_job_id ON batch_job_items(job_id);
+CREATE INDEX idx_batch_job_items_job_id ON batch_job_items(job_id, status);
+CREATE INDEX idx_batch_jobs_status ON batch_jobs(status);

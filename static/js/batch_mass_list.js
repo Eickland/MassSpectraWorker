@@ -202,20 +202,55 @@ function parseItemsText(text) {
 }
 
 /* ============================================================
-   Collect JobParams (must match Go model.JobParams exactly:
-   percentile is an int, rel_error is 0-1, width/height/dpi are ints)
+   Brutto dict: '{"C": [4, 50], ...}' -> {C: {min: 4, max: 50}, ...}
+   Пустое поле -> null (Python возьмёт словарь по умолчанию).
+   ============================================================ */
+function parseBruttoDict(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (e) {
+    throw new Error('Брутто-словарь: некорректный JSON (' + e.message + ')');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Брутто-словарь: ожидается объект вида {"C": [4, 50]}');
+  }
+  const out = {};
+  for (const [el, v] of Object.entries(parsed)) {
+    let min, max;
+    if (Array.isArray(v) && v.length === 2) {
+      [min, max] = v;
+    } else if (v && typeof v === 'object' && 'min' in v && 'max' in v) {
+      ({ min, max } = v);
+    } else {
+      throw new Error(`Брутто-словарь: для "${el}" нужен [min, max]`);
+    }
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min > max) {
+      throw new Error(`Брутто-словарь: для "${el}" нужны целые min ≤ max`);
+    }
+    out[el] = { min, max };
+  }
+  return out;
+}
+
+/* ============================================================
+   Collect JobParams (must match Go model.JobParams:
+   rel_error in ppm, width/height/dpi/charge_max are ints)
    ============================================================ */
 function collectParams() {
   return {
     low_percentile: parseFloat($('low_percentile').value) || 99.5,
     high_percentile: parseFloat($('high_percentile').value) || 99.9,
     rel_error: parseFloat($('rel-error').value) || 0.5,
+    charge_max: parseInt($('charge-max').value, 10) || 1,
     protocol: $('protocol').value,
-    brutto_dict: $('brutto-dict').value.trim(),
+    brutto_dict: parseBruttoDict($('brutto-dict').value),
     width: parseInt($('width').value, 10) || 10,
     height: parseInt($('height').value, 10) || 6,
     dpi: parseInt($('dpi').value, 10) || 100,
-    format: $('format').value,
+    output_format: $('format').value,
   };
 }
 
