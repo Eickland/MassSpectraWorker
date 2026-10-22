@@ -1,5 +1,5 @@
 # Универсальный Makefile для WSL/Linux/macOS
-.PHONY: proto proto-python proto-go clean
+.PHONY: proto proto-python proto-go clean deps test run
 
 PROJECT_ROOT := .
 PROTO_DIR := src/protobuf
@@ -54,6 +54,17 @@ clean:
 	@cd $(PROJECT_ROOT) && \
 	$(RM_CMD) $(PROTO_DIR)/*_pb2_grpc.py 2>/dev/null || true
 	@echo "✅ Cleaned all generated files!"
+
+# Зависимости Go (драйвер SQLite modernc.org/sqlite — чистый Go, без cgo)
+deps:
+	go get modernc.org/sqlite@latest
+	go mod tidy
+
+test:
+	go test ./internal/...
+
+run:
+	go run ./cmd/api
 
 # Отладка - показать настройки
 debug:
