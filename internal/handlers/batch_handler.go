@@ -40,6 +40,8 @@ type CreateJobRequest struct {
 type CreateJobItem struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
+	// Необязательные параметры этого спектра поверх общих (частичный JSON)
+	Params json.RawMessage `json:"params,omitempty"`
 }
 
 // CreateJob - POST /api/batch
@@ -68,17 +70,14 @@ func (h *BatchHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if len(req.Items) > 0 {
-		// Если передан список файлов
-		items := make([]model.JobItem, len(req.Items))
+		// Если передан список файлов (у каждого могут быть свои параметры)
+		list := make([]service.ItemOverride, len(req.Items))
 		for i, item := range req.Items {
-			items[i] = model.JobItem{
-				SpectraName: item.Name,
-				SpectraPath: item.Path,
-			}
+			list[i] = service.ItemOverride{Name: item.Name, Path: item.Path, Params: item.Params}
 		}
-		job, err = h.service.CreateJobFromItems(items, req.Params)
+		job, err = h.service.CreateJobWithOverrides(list, req.Params)
 		if err != nil {
-			http.Error(w, "Failed to create job from items: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Failed to create job from items: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 	} else {
@@ -126,10 +125,135 @@ func writeLookupError(w http.ResponseWriter, err error) {
 
 // resultURL - URL картинки результата для галереи
 func resultURL(it model.JobItem) string {
-	if it.ResultPath == nil || *it.ResultPath == "" {
+	return fileURL(it.JobID, it.ResultPath)
+}
+
+func fileURL(jobID uuid.UUID, p *string) string {
+	if p == nil || *p == "" {
 		return ""
 	}
-	return "/results/" + path.Join(it.JobID.String(), filepath.Base(*it.ResultPath))
+	return "/results/" + path.Join(jobID.String(), filepath.Base(*p))
+}
+
+// sseKey - элемент заново попадает в поток событий, когда у него
+// появляется новый итог (новый прогон или новая ошибка)
+func sseKey(it model.JobItem) string {
+	run := ""
+	if it.CurrentRunID != nil {
+		run = it.CurrentRunID.String()
+	}
+	finished := ""
+	if it.FinishedAt != nil {
+		finished = it.FinishedAt.Format(time.RFC3339Nano)
+	}
+	return it.ID.String() + "|" + it.Status + "|" + run + "|" + finished
+}
+
+func parseItemIDs(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+	jobID, err := uuid.Parse(chi.URLParam(r, "job_id"))
+	if err != nil {
+		http.Error(w, "Invalid job ID", http.StatusBadRequest)
+		return uuid.Nil, uuid.Nil, false
+	}
+	itemID, err := uuid.Parse(chi.URLParam(r, "item_id"))
+	if err != nil {
+		http.Error(w, "Invalid item ID", http.StatusBadRequest)
+		return uuid.Nil, uuid.Nil, false
+	}
+	return jobID, itemID, true
+}
+
+// writeItemError - коды ответов для операций над спектром
+func writeItemError(w http.ResponseWriter, err error) {
+	var verr *service.ValidationError
+	switch {
+	case errors.As(err, &verr):
+		http.Error(w, "Invalid params: "+verr.Error(), http.StatusBadRequest)
+	case errors.Is(err, repository.ErrNotFound):
+		http.Error(w, "Not found", http.StatusNotFound)
+	case errors.Is(err, repository.ErrItemBusy):
+		http.Error(w, "Спектр уже в очереди или обрабатывается", http.StatusConflict)
+	case errors.Is(err, repository.ErrJobBusy):
+		http.Error(w, "Задача отменяется — дождитесь завершения", http.StatusConflict)
+	case errors.Is(err, repository.ErrRunNotUsable):
+		http.Error(w, "Выбрать можно только успешный прогон", http.StatusConflict)
+	default:
+		log.Printf("batch item: %v", err)
+		http.Error(w, "Internal error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GetItem - GET /api/batch/{job_id}/items/{item_id}
+// Спектр, его текущие параметры и история прогонов.
+func (h *BatchHandler) GetItem(w http.ResponseWriter, r *http.Request) {
+	jobID, itemID, ok := parseItemIDs(w, r)
+	if !ok {
+		return
+	}
+	d, err := h.service.GetItemDetail(jobID, itemID)
+	if err != nil {
+		writeItemError(w, err)
+		return
+	}
+	if d.Item.Status == model.ItemDone {
+		d.Item.ResultURL = resultURL(d.Item)
+	}
+	for i := range d.Runs {
+		d.Runs[i].ResultURL = fileURL(jobID, d.Runs[i].ResultPath)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(d)
+}
+
+// ReprocessRequest - тело POST .../reprocess
+type ReprocessRequest struct {
+	// Полные или частичные параметры поверх текущих параметров спектра
+	Params json.RawMessage `json:"params"`
+	// true — взять за основу параметры задачи (сбросить индивидуальные)
+	ResetToJob bool `json:"reset_to_job"`
+}
+
+// ReprocessItem - POST /api/batch/{job_id}/items/{item_id}/reprocess
+func (h *BatchHandler) ReprocessItem(w http.ResponseWriter, r *http.Request) {
+	jobID, itemID, ok := parseItemIDs(w, r)
+	if !ok {
+		return
+	}
+	var req ReprocessRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.service.ReprocessItem(jobID, itemID, req.Params, req.ResetToJob); err != nil {
+		writeItemError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"job_id":  jobID,
+		"item_id": itemID,
+		"status":  model.ItemPending,
+	})
+}
+
+// SelectRun - POST /api/batch/{job_id}/items/{item_id}/runs/{run_id}/select
+func (h *BatchHandler) SelectRun(w http.ResponseWriter, r *http.Request) {
+	jobID, itemID, ok := parseItemIDs(w, r)
+	if !ok {
+		return
+	}
+	runID, err := uuid.Parse(chi.URLParam(r, "run_id"))
+	if err != nil {
+		http.Error(w, "Invalid run ID", http.StatusBadRequest)
+		return
+	}
+	if err := h.service.SelectRun(jobID, itemID, runID); err != nil {
+		writeItemError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"item_id": itemID, "current_run_id": runID})
 }
 
 // GetJobItems - GET /api/batch/{job_id}/items
@@ -278,13 +402,13 @@ func (h *BatchHandler) observeJobEvents(jobID uuid.UUID, eventChan chan<- string
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	seen := make(map[uuid.UUID]struct{}) // элементы, о которых уже сообщили
+	seen := make(map[string]struct{}) // итоги элементов, о которых уже сообщили
 
 	// Готовые к моменту подключения элементы уже ушли в init
 	if items, err := h.service.GetJobItems(jobID); err == nil {
 		for _, it := range items {
 			if it.Status == model.ItemDone || it.Status == model.ItemFailed {
-				seen[it.ID] = struct{}{}
+				seen[sseKey(it)] = struct{}{}
 			}
 		}
 	}
@@ -313,10 +437,11 @@ func (h *BatchHandler) observeJobEvents(jobID uuid.UUID, eventChan chan<- string
 				if it.Status != model.ItemDone && it.Status != model.ItemFailed {
 					continue
 				}
-				if _, ok := seen[it.ID]; ok {
+				key := sseKey(it)
+				if _, ok := seen[key]; ok {
 					continue
 				}
-				seen[it.ID] = struct{}{}
+				seen[key] = struct{}{}
 
 				if it.Status == model.ItemFailed {
 					errMsg := ""

@@ -147,10 +147,27 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 			break // элементов больше нет
 		}
 
-		procErr := p.processItem(job, item)
+		// Параметры спектра: индивидуальные или параметры задачи
+		params := item.EffectiveParams(job.Params)
+		run, err := p.repo.StartRun(item.ID, params)
+		if err != nil {
+			log.Printf("item %s: failed to start run: %v", item.ID, err)
+			if err := p.repo.ResetItemToPending(item.ID); err != nil {
+				log.Printf("item %s: reset failed: %v", item.ID, err)
+			}
+			if !p.sleep(time.Second) {
+				return
+			}
+			continue
+		}
+
+		procErr := p.processItem(item, run)
 
 		if procErr != nil && p.ctx.Err() != nil {
 			// Прервано остановкой сервера, а не ошибкой обработки
+			if err := p.repo.DeleteRun(run.ID); err != nil {
+				log.Printf("run %s: delete failed: %v", run.ID, err)
+			}
 			if err := p.repo.ResetItemToPending(item.ID); err != nil {
 				log.Printf("item %s: reset failed: %v", item.ID, err)
 			}
@@ -158,16 +175,15 @@ func (p *WorkerPool) processJob(jobID uuid.UUID) {
 		}
 
 		if procErr != nil {
-			log.Printf("item %s (%s) FAILED: %v", item.ID, item.SpectraName, procErr)
+			log.Printf("item %s (%s) run #%d FAILED: %v", item.ID, item.SpectraName, run.RunNo, procErr)
 			msg := procErr.Error()
-			item.Status = model.ItemFailed
-			item.Error = &msg
+			run.Status = model.RunFailed
+			run.Error = &msg
 		} else {
-			item.Status = model.ItemDone
-			item.Error = nil
+			run.Status = model.RunDone
 		}
 
-		if err := p.repo.UpdateItemResult(*item); err != nil {
+		if err := p.repo.CompleteRun(*item, *run); err != nil {
 			log.Printf("item %s: failed to save result: %v", item.ID, err)
 		}
 		if _, err := p.repo.RecountJob(jobID); err != nil {
@@ -239,10 +255,11 @@ func (p *WorkerPool) sleep(d time.Duration) bool {
 	}
 }
 
-// processItem - обработка одного элемента (спектра)
-func (p *WorkerPool) processItem(job *model.Job, item *model.JobItem) error {
+// processItem - обработка спектра с параметрами прогона; пути к результатам
+// записываются в run
+func (p *WorkerPool) processItem(item *model.JobItem, run *model.ItemRun) error {
 	kind := detectInputKind(item.SpectraPath)
-	log.Printf("Processing item %s (%s), kind=%s", item.ID, item.SpectraName, kind)
+	log.Printf("Processing item %s (%s) run #%d, kind=%s", item.ID, item.SpectraName, run.RunNo, kind)
 
 	var mzmlPath string
 	switch kind {
@@ -261,7 +278,7 @@ func (p *WorkerPool) processItem(job *model.Job, item *model.JobItem) error {
 		return fmt.Errorf("unsupported input: %s", item.SpectraPath)
 	}
 
-	params := job.Params
+	params := run.Params
 	params.ApplyDefaults()
 
 	req := &pb.MassListRequest{
@@ -293,15 +310,15 @@ func (p *WorkerPool) processItem(job *model.Job, item *model.JobItem) error {
 	if format == "" {
 		format = params.OutputFormat
 	}
-	plotPath := p.resultPath(item.JobID, item.SpectraName, format)
+	plotPath := p.resultPath(item.JobID, item.SpectraName, run.RunNo, format)
 	if err := saveResult(plotPath, resp.ImageData); err != nil {
 		return fmt.Errorf("failed to save plot: %w", err)
 	}
-	item.ResultPath = &plotPath
+	run.ResultPath = &plotPath
 
 	// Сохраняем таблицу спектра (если пришла)
 	if resp.Spectrum != nil && resp.Spectrum.NRows > 0 {
-		sp := p.spectrumPath(item.JobID, item.SpectraName)
+		sp := p.spectrumPath(item.JobID, item.SpectraName, run.RunNo)
 		if err := saveSpectrumCSV(sp, resp.Spectrum); err != nil {
 			return fmt.Errorf("failed to save spectrum: %w", err)
 		}
@@ -312,10 +329,10 @@ func (p *WorkerPool) processItem(job *model.Job, item *model.JobItem) error {
 		size := info.Size()
 		rows := int(resp.Spectrum.NRows)
 		cols := int(resp.Spectrum.NCols)
-		item.SpectrumPath = &sp
-		item.SpectrumRows = &rows
-		item.SpectrumCols = &cols
-		item.SpectrumSize = &size
+		run.SpectrumPath = &sp
+		run.SpectrumRows = &rows
+		run.SpectrumCols = &cols
+		run.SpectrumSize = &size
 	}
 
 	log.Printf("Item %s processed: plot=%d bytes, spectrum_rows=%d",
@@ -335,16 +352,26 @@ func baseName(spectraName string) string {
 	return strings.TrimSuffix(spectraName, filepath.Ext(spectraName))
 }
 
-func (p *WorkerPool) resultPath(jobID uuid.UUID, spectraName, format string) string {
+// runBase - имя файлов прогона: первый прогон без суффикса (как раньше),
+// последующие — name__r2, name__r3... Файлы прогонов не перезаписывают друг
+// друга, поэтому к любому из них можно вернуться.
+func runBase(spectraName string, runNo int) string {
+	if runNo <= 1 {
+		return baseName(spectraName)
+	}
+	return fmt.Sprintf("%s__r%d", baseName(spectraName), runNo)
+}
+
+func (p *WorkerPool) resultPath(jobID uuid.UUID, spectraName string, runNo int, format string) string {
 	ext := strings.ToLower(format)
 	if ext == "jpeg" {
 		ext = "jpg"
 	}
-	return filepath.Join(p.cfg.ResultsDir, jobID.String(), baseName(spectraName)+"."+ext)
+	return filepath.Join(p.cfg.ResultsDir, jobID.String(), runBase(spectraName, runNo)+"."+ext)
 }
 
-func (p *WorkerPool) spectrumPath(jobID uuid.UUID, spectraName string) string {
-	return filepath.Join(p.cfg.ResultsDir, jobID.String(), baseName(spectraName)+"_spectrum.csv")
+func (p *WorkerPool) spectrumPath(jobID uuid.UUID, spectraName string, runNo int) string {
+	return filepath.Join(p.cfg.ResultsDir, jobID.String(), runBase(spectraName, runNo)+"_spectrum.csv")
 }
 
 func (p *WorkerPool) mzmlCachePath(jobID uuid.UUID, spectraName string) string {

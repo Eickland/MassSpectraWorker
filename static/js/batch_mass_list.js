@@ -67,6 +67,8 @@ const galleryEl      = document.getElementById("gallery");
 const galleryEmptyEl = document.getElementById("gallery-empty");
 const galleryCountEl = document.getElementById("gallery-count");
 
+const GEAR_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>';
+
 /* ---------- Local state ---------- */
 let currentJobId = null;
 let currentPage = 1;
@@ -116,18 +118,28 @@ function addGalleryItem(raw) {
   const result_url = raw.result_url;
   const spectra_name = raw.spectra_name;
   if (!result_url || id == null) return;
-  if (galleryEl.querySelector(`[data-item-id="${CSS.escape(String(id))}"]`)) return;
+  const existing = galleryEl.querySelector(`[data-item-id="${CSS.escape(String(id))}"]`);
+  if (existing) {
+    // Спектр пересчитан или выбран другой прогон — обновляем картинку и ссылки
+    if (existing.dataset.resultUrl !== result_url) {
+      existing.dataset.resultUrl = result_url;
+      existing.querySelector('.gallery-card__img').src = result_url;
+      existing.querySelectorAll('.gallery-card__actions a').forEach((a) => { a.href = result_url; });
+    }
+    return;
+  }
 
   const card = document.createElement("div");
   card.className = "gallery-card";
   card.dataset.itemId = id;
+  card.dataset.resultUrl = result_url;
 
   const img = document.createElement("img");
   img.className = "gallery-card__img";
   img.loading = "lazy";
   img.src = result_url;
   img.alt = spectra_name || id;
-  img.addEventListener("click", () => openLightbox(result_url, img.alt));
+  img.addEventListener("click", () => openLightbox(card.dataset.resultUrl, img.alt));
 
   const meta = document.createElement("div");
   meta.className = "gallery-card__meta";
@@ -140,6 +152,7 @@ function addGalleryItem(raw) {
   const actions = document.createElement("div");
   actions.className = "gallery-card__actions";
   actions.innerHTML = `
+    <button type="button" class="item-edit" data-item-id="${escapeHtml(String(id))}" title="Параметры и пересчёт спектра">${GEAR_SVG}</button>
     <a href="${result_url}" target="_blank" rel="noopener" title="Открыть в новой вкладке">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
     </a>
@@ -333,14 +346,16 @@ function stopTracking() {
   clearTimeout(itemsRefreshTimer);
 }
 
-function trackJob(jobId) {
+function trackJob(jobId, { reset = true } = {}) {
   stopTracking();
-  resetGallery();
-  currentJobId = jobId;
-  currentPage = 1;
-  showActiveState(jobId);
+  if (reset) {
+    resetGallery();
+    currentJobId = jobId;
+    currentPage = 1;
+    showActiveState(jobId);
+  }
   fetchStatus(jobId);
-  fetchItems(jobId, 1);
+  fetchItems(jobId, currentPage);
 
   try {
     es = new EventSource(`/api/batch/${jobId}/events`);
@@ -522,12 +537,14 @@ function renderItems(items) {
     <div class="items-row">
       <div class="item-name" title="${escapeHtml(item.spectra_path)}">
         ${escapeHtml(item.spectra_name)}
+        ${item.params ? '<span class="tag" title="У спектра свои параметры">свои</span>' : ''}
         <span class="item-path">${escapeHtml(item.spectra_path)}</span>
       </div>
       <span class="item-status-cell item-status" data-status="${item.status}">
         <span class="dot"></span>${item.status}
       </span>
       <span class="item-error" title="${escapeHtml(item.error || '')}">${escapeHtml(item.error || '')}</span>
+      <button type="button" class="icon-btn item-edit" data-item-id="${escapeHtml(item.id)}" title="Параметры и пересчёт спектра">${GEAR_SVG}</button>
     </div>
   `).join('');
 }
@@ -724,6 +741,8 @@ browseModal.addEventListener('click', (e) => {
   if (e.target === browseModal) closeBrowseModal();
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !itemModal.classList.contains('hidden')
+      && document.getElementById('lightbox').classList.contains('hidden')) closeItemModal();
   if (e.key === 'Escape' && !browseModal.classList.contains('hidden')) closeBrowseModal();
 });
 
@@ -771,3 +790,307 @@ document.addEventListener('DOMContentLoaded', () => {
     trackJob(active.id);
   }
 });
+
+/* ============================================================
+   Per-spectrum parameters: edit, reprocess, run history
+   API:
+     GET  /api/batch/{job}/items/{item}            -> {item, job_params, effective_params, custom_params, runs}
+     POST /api/batch/{job}/items/{item}/reprocess  {params} -> 202
+     POST /api/batch/{job}/items/{item}/runs/{run}/select
+   ============================================================ */
+const itemModal   = $('item-modal');
+const ipTitle     = $('ip-title');
+const ipParamsTag = $('ip-params-tag');
+const ipStatus    = $('ip-status');
+const ipError     = $('ip-error');
+const ipRunsList  = $('ip-runs-list');
+const ipReprocessBtn = $('ip-reprocess');
+const ipUseJobBtn    = $('ip-use-job');
+
+let ipItemId = null;
+let ipDetail = null;
+let ipPollTimer = null;
+
+// Кнопки «Параметры» в таблице и в галерее
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.item-edit');
+  if (btn && btn.dataset.itemId) {
+    e.preventDefault();
+    openItemModal(btn.dataset.itemId);
+  }
+});
+
+$('ip-close').addEventListener('click', closeItemModal);
+itemModal.addEventListener('click', (e) => { if (e.target === itemModal) closeItemModal(); });
+
+async function openItemModal(itemId) {
+  if (!currentJobId) return;
+  ipItemId = itemId;
+  ipDetail = null;
+  ipTitle.textContent = 'Загрузка…';
+  ipRunsList.innerHTML = '';
+  setIpError('');
+  itemModal.classList.remove('hidden');
+  const ok = await loadItemDetail({ fillForm: true });
+  if (ok && isBusy(ipDetail.item)) startIpPolling();
+}
+
+function closeItemModal() {
+  itemModal.classList.add('hidden');
+  stopIpPolling();
+  ipItemId = null;
+  ipDetail = null;
+}
+
+function isBusy(item) {
+  return item && (item.status === 'pending' || item.status === 'processing');
+}
+
+async function loadItemDetail({ fillForm = false } = {}) {
+  const itemId = ipItemId;
+  try {
+    const res = await fetch(`/api/batch/${currentJobId}/items/${itemId}`);
+    if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+    const detail = await res.json();
+    if (itemId !== ipItemId) return false; // окно уже закрыли или открыли другой спектр
+    ipDetail = detail;
+    renderItemHeader(detail);
+    renderRuns(detail);
+    if (fillForm) fillItemForm(detail.effective_params);
+    return true;
+  } catch (err) {
+    setIpError('Не удалось загрузить спектр: ' + err.message);
+    return false;
+  }
+}
+
+function renderItemHeader(d) {
+  ipTitle.textContent = d.item.spectra_name;
+  ipTitle.title = d.item.spectra_path;
+  ipParamsTag.textContent = d.custom_params ? 'свои параметры' : 'параметры задачи';
+  ipParamsTag.classList.toggle('tag--muted', !d.custom_params);
+
+  const busy = isBusy(d.item);
+  ipStatus.dataset.busy = busy ? '1' : '0';
+  ipStatus.textContent = busy
+    ? (d.item.status === 'pending' ? 'в очереди…' : 'обрабатывается…')
+    : (d.item.status === 'failed' ? 'последний прогон с ошибкой' : '');
+  ipReprocessBtn.disabled = busy;
+}
+
+function paramsSummary(p) {
+  if (!p) return '';
+  const parts = [
+    p.protocol,
+    `${p.rel_error} ppm`,
+    `z≤${p.charge_max}`,
+    `${p.low_percentile}–${p.high_percentile}%`,
+  ];
+  if (p.brutto_dict) {
+    parts.push(Object.entries(p.brutto_dict).map(([el, r]) => `${el}${r.min}-${r.max}`).join(' '));
+  }
+  if (p.options && p.options.recalibrate === 'false') parts.push('без рекалибровки');
+  return parts.join(' · ');
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+}
+
+function renderRuns(d) {
+  const runs = d.runs || [];
+  if (!runs.length) {
+    ipRunsList.innerHTML = '<div class="empty-note">Прогонов ещё не было.</div>';
+    return;
+  }
+  ipRunsList.innerHTML = runs.map((r) => {
+    const thumb = r.result_url && /\.(png|jpe?g|svg)$/i.test(r.result_url)
+      ? `<img class="run-card__thumb" src="${escapeHtml(r.result_url)}" alt="Прогон ${r.run_no}" data-full="${escapeHtml(r.result_url)}" loading="lazy">`
+      : `<div class="run-card__thumb run-card__thumb--empty">${
+          r.status === 'processing' ? 'обработка…' : r.status === 'failed' ? 'ошибка' : (r.result_url ? 'PDF' : 'нет картинки')}</div>`;
+    const statusTag = r.status === 'failed'
+      ? '<span class="tag tag--danger">ошибка</span>'
+      : r.status === 'processing' ? '<span class="tag tag--muted">обработка</span>' : '';
+    const canSelect = r.status === 'done' && !r.current && !isBusy(d.item);
+    return `
+      <div class="run-card ${r.current ? 'current' : ''}">
+        ${thumb}
+        <div class="run-card__body">
+          <div class="run-card__title">
+            Прогон #${r.run_no}
+            ${r.current ? '<span class="tag">текущий</span>' : ''}
+            ${statusTag}
+          </div>
+          <div class="run-card__meta">${escapeHtml(formatTime(r.finished_at || r.created_at))}${
+            r.spectrum_rows ? ` · формул: ${r.spectrum_rows}` : ''}</div>
+          <div class="run-card__params" title="${escapeHtml(paramsSummary(r.params))}">${escapeHtml(paramsSummary(r.params))}</div>
+          ${r.error ? `<div class="run-card__error" title="${escapeHtml(r.error)}">${escapeHtml(r.error)}</div>` : ''}
+          <div class="run-card__actions">
+            ${canSelect ? `<button type="button" class="btn btn--primary btn--sm" data-select-run="${r.id}">Сделать текущим</button>` : ''}
+            <button type="button" class="btn btn--ghost btn--sm" data-load-run="${r.id}" title="Подставить параметры этого прогона в форму">Взять параметры</button>
+            ${r.result_url ? `<a class="btn btn--ghost btn--sm" href="${escapeHtml(r.result_url)}" target="_blank" rel="noopener">Открыть</a>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+ipRunsList.addEventListener('click', async (e) => {
+  const thumb = e.target.closest('.run-card__thumb[data-full]');
+  if (thumb) { openLightbox(thumb.dataset.full, ipTitle.textContent); return; }
+
+  const loadBtn = e.target.closest('[data-load-run]');
+  if (loadBtn && ipDetail) {
+    const run = (ipDetail.runs || []).find((r) => r.id === loadBtn.dataset.loadRun);
+    if (run) { fillItemForm(run.params); showToast(`Параметры прогона #${run.run_no} в форме`); }
+    return;
+  }
+
+  const selBtn = e.target.closest('[data-select-run]');
+  if (selBtn) {
+    selBtn.disabled = true;
+    try {
+      const res = await fetch(
+        `/api/batch/${currentJobId}/items/${ipItemId}/runs/${selBtn.dataset.selectRun}/select`,
+        { method: 'POST' });
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+      showToast('Прогон выбран');
+      await loadItemDetail({ fillForm: true });
+      if (ipDetail && ipDetail.item.result_url) {
+        addGalleryItem({ id: ipDetail.item.id, spectra_name: ipDetail.item.spectra_name, result_url: ipDetail.item.result_url });
+      }
+      fetchStatus(currentJobId);
+      fetchItems(currentJobId, currentPage);
+    } catch (err) {
+      setIpError('Не удалось выбрать прогон: ' + err.message);
+      selBtn.disabled = false;
+    }
+  }
+});
+
+/* ---------- form <-> params ---------- */
+function bruttoToText(dict) {
+  if (!dict || !Object.keys(dict).length) return '';
+  const parts = Object.entries(dict).map(([el, r]) => `"${el}": [${r.min}, ${r.max}]`);
+  return '{' + parts.join(', ') + '}';
+}
+
+function fillItemForm(p) {
+  if (!p) return;
+  const opts = p.options || {};
+  $('ip-low').value = p.low_percentile ?? '';
+  $('ip-high').value = p.high_percentile ?? '';
+  $('ip-protocol').value = p.protocol || 'non_tmds';
+  $('ip-rel').value = p.rel_error ?? '';
+  $('ip-charge').value = p.charge_max ?? 1;
+  $('ip-recal').checked = opts.recalibrate !== 'false';
+  $('ip-brutto').value = bruttoToText(p.brutto_dict);
+  $('ip-sulfur').value = opts.sulfur_precision_factor ?? '';
+  $('ip-nitrogen').value = opts.nitrogen_precision_factor ?? '';
+  $('ip-width').value = p.width ?? '';
+  $('ip-height').value = p.height ?? '';
+  $('ip-dpi').value = p.dpi ?? '';
+  $('ip-format').value = p.output_format || 'png';
+  setIpError('');
+}
+
+function numOrUndefined(id, parse = parseFloat) {
+  const v = $(id).value.trim();
+  if (v === '') return undefined;
+  const n = parse(v, 10);
+  if (Number.isNaN(n)) throw new Error(`Поле «${$(id).labels?.[0]?.textContent.trim() || id}»: нужно число`);
+  return n;
+}
+
+function collectItemParams() {
+  // Опции, которых нет в форме (например, tmds_*), сохраняем как были
+  const base = (ipDetail && ipDetail.effective_params && ipDetail.effective_params.options) || {};
+  const options = { ...base, recalibrate: $('ip-recal').checked ? 'true' : 'false' };
+  const sulfur = $('ip-sulfur').value.trim();
+  const nitrogen = $('ip-nitrogen').value.trim();
+  if (sulfur) options.sulfur_precision_factor = sulfur; else delete options.sulfur_precision_factor;
+  if (nitrogen) options.nitrogen_precision_factor = nitrogen; else delete options.nitrogen_precision_factor;
+
+  return {
+    low_percentile: numOrUndefined('ip-low') ?? 0,
+    high_percentile: numOrUndefined('ip-high') ?? 0,
+    protocol: $('ip-protocol').value,
+    rel_error: numOrUndefined('ip-rel'),
+    charge_max: numOrUndefined('ip-charge', parseInt),
+    brutto_dict: parseBruttoDict($('ip-brutto').value),
+    options,
+    width: numOrUndefined('ip-width', parseInt),
+    height: numOrUndefined('ip-height', parseInt),
+    dpi: numOrUndefined('ip-dpi', parseInt),
+    output_format: $('ip-format').value,
+  };
+}
+
+function setIpError(text) {
+  ipError.textContent = text;
+  ipError.title = text;
+  ipError.classList.toggle('hidden', !text);
+}
+
+ipUseJobBtn.addEventListener('click', () => {
+  if (ipDetail) {
+    fillItemForm(ipDetail.job_params);
+    showToast('В форме общие параметры задачи');
+  }
+});
+
+ipReprocessBtn.addEventListener('click', async () => {
+  if (!ipItemId || !currentJobId) return;
+  let params;
+  try {
+    params = collectItemParams();
+  } catch (err) {
+    setIpError(err.message);
+    return;
+  }
+  setIpError('');
+  ipReprocessBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/batch/${currentJobId}/items/${ipItemId}/reprocess`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ params }),
+    });
+    if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+    showToast('Спектр поставлен в очередь');
+    // Задача снова в работе — переподключаемся к потоку событий, не сбрасывая галерею
+    trackJob(currentJobId, { reset: false });
+    await loadItemDetail();
+    startIpPolling();
+  } catch (err) {
+    setIpError('Не удалось запустить пересчёт: ' + err.message);
+    ipReprocessBtn.disabled = false;
+  }
+});
+
+function startIpPolling() {
+  stopIpPolling();
+  ipPollTimer = setInterval(async () => {
+    if (!ipItemId) { stopIpPolling(); return; }
+    await loadItemDetail();
+    if (ipDetail && !isBusy(ipDetail.item)) {
+      stopIpPolling();
+      if (ipDetail.item.status === 'done') {
+        showToast('Пересчёт готов');
+        if (ipDetail.item.result_url) {
+          addGalleryItem({ id: ipDetail.item.id, spectra_name: ipDetail.item.spectra_name, result_url: ipDetail.item.result_url });
+        }
+      } else if (ipDetail.item.status === 'failed') {
+        showToast('Пересчёт завершился ошибкой');
+      }
+      fetchItems(currentJobId, currentPage);
+    }
+  }, 1500);
+}
+
+function stopIpPolling() {
+  if (ipPollTimer) { clearInterval(ipPollTimer); ipPollTimer = null; }
+}

@@ -109,7 +109,7 @@
     }
     .items-table-head, .items-row {
       display: grid;
-      grid-template-columns: 1fr 90px 140px;
+      grid-template-columns: 1fr 90px 140px 34px;
       gap: 10px;
       align-items: center;
       padding: 9px 14px;
@@ -235,9 +235,78 @@
       background: var(--surface-2);
     }
 
+    /* ---- Per-spectrum parameters ---- */
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 7px;
+      background: transparent; border: 1px solid transparent;
+      color: var(--text-muted); cursor: pointer;
+    }
+    .icon-btn:hover { color: var(--accent); border-color: var(--accent-line); background: var(--surface-2); }
+    .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .gallery-card__actions button {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border-radius: 6px; padding: 0;
+      background: transparent; color: var(--text-muted); border: 1px solid transparent; cursor: pointer;
+    }
+    .gallery-card__actions button:hover { color: var(--accent); border-color: var(--accent-line); background: var(--surface-2); }
+    .tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase;
+      padding: 1px 6px; border-radius: 10px; vertical-align: middle;
+      border: 1px solid var(--accent-line); color: var(--accent); background: var(--surface-2);
+    }
+    .tag--muted { border-color: var(--border-strong); color: var(--text-dim); }
+    .tag--danger { border-color: var(--danger); color: var(--danger); }
+
+    .modal--wide { max-width: 1040px; max-height: 88vh; }
+    .ip-head-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .ip-head-meta .modal__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ip-body {
+      display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1.15fr);
+      flex: 1; min-height: 0; overflow: hidden;
+    }
+    .ip-form { overflow-y: auto; padding: 16px; border-right: 1px solid var(--border); }
+    .ip-form .field__row--3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .ip-form .sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin: 6px 0 10px; }
+    .ip-form textarea { min-height: 96px; }
+    .ip-check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; }
+    .ip-runs { overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .ip-runs__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .run-card {
+      display: grid; grid-template-columns: 132px 1fr; gap: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 8px;
+    }
+    .run-card.current { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line) inset; }
+    .run-card__thumb {
+      width: 132px; height: 92px; border-radius: 6px; object-fit: cover;
+      background: var(--surface-2); cursor: zoom-in; display: block;
+    }
+    .run-card__thumb--empty {
+      display: flex; align-items: center; justify-content: center; cursor: default;
+      font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); text-align: center; padding: 6px;
+    }
+    .run-card__body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    .run-card__title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; color: var(--text); }
+    .run-card__meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
+    .run-card__params { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .run-card__error { font-family: var(--font-mono); font-size: 10.5px; color: var(--danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .run-card__actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+    .ip-status { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+    .ip-status[data-busy="1"] { color: var(--warn); }
+
+    @media (max-width: 760px) {
+      .ip-body { grid-template-columns: 1fr; overflow-y: auto; }
+      .ip-form { border-right: none; border-bottom: 1px solid var(--border); overflow: visible; }
+      .ip-runs { overflow: visible; }
+    }
+
     @media (max-width: 560px) {
-      .items-table-head, .items-row { grid-template-columns: 1fr 70px; }
-      .items-table-head span:nth-child(3), .items-row .item-status-cell { display: none; }
+      .items-table-head, .items-row { grid-template-columns: 1fr 70px 34px; }
+      .items-table-head span:nth-child(3), .items-row .item-error { display: none; }
+      .run-card { grid-template-columns: 96px 1fr; }
+      .run-card__thumb { width: 96px; height: 72px; }
     }
   </style>
 </head>
@@ -486,6 +555,7 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
               <span>Файл</span>
               <span class="item-status-cell">Статус</span>
               <span>Ошибка</span>
+              <span></span>
             </div>
             <div class="items-body" id="items-body"></div>
           </div>
@@ -547,6 +617,120 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
       <span class="spacer" style="flex:1"></span>
       <button type="button" class="btn btn--ghost btn--sm" id="browse-cancel">Отмена</button>
       <button type="button" class="btn btn--primary btn--sm" id="browse-select">Выбрать эту папку</button>
+    </div>
+  </div>
+</div>
+
+<!-- Per-spectrum parameters & runs -->
+<div class="modal-overlay hidden" id="item-modal">
+  <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="ip-title">
+    <div class="modal__head">
+      <div class="ip-head-meta">
+        <span class="modal__title" id="ip-title">Спектр</span>
+        <span class="tag tag--muted" id="ip-params-tag">параметры задачи</span>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm" id="ip-close" title="Закрыть">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="ip-body">
+      <form class="ip-form" id="ip-form" autocomplete="off">
+        <div class="sub">Извлечение пиков</div>
+        <div class="field__row">
+          <div class="field">
+            <label class="lbl" for="ip-low">Нижний перцентиль <span class="hint">%</span></label>
+            <input type="number" id="ip-low" min="0" max="100" step="0.001">
+          </div>
+          <div class="field">
+            <label class="lbl" for="ip-high">Верхний перцентиль <span class="hint">%</span></label>
+            <input type="number" id="ip-high" min="0" max="100" step="0.001">
+          </div>
+        </div>
+
+        <div class="sub">Приписывание формул</div>
+        <div class="field__row">
+          <div class="field">
+            <label class="lbl" for="ip-protocol">Протокол</label>
+            <select id="ip-protocol">
+              <option value="non_tmds">Non-TMDS</option>
+              <option value="tmds">TMDS</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="lbl" for="ip-rel">Отн. ошибка <span class="hint">ppm</span></label>
+            <input type="number" id="ip-rel" min="0.01" max="100" step="0.1">
+          </div>
+        </div>
+        <div class="field__row">
+          <div class="field">
+            <label class="lbl" for="ip-charge">Макс. заряд</label>
+            <input type="number" id="ip-charge" min="1" max="10" step="1">
+          </div>
+          <div class="field" style="display:flex; align-items:flex-end; padding-bottom: 11px;">
+            <label class="ip-check"><input type="checkbox" id="ip-recal"> Рекалибровка</label>
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="ip-brutto">Брутто-словарь <span class="hint">JSON</span></label>
+          <textarea id="ip-brutto" spellcheck="false" rows="4"></textarea>
+          <div class="field__note">Пусто — словарь по умолчанию.</div>
+        </div>
+        <div class="field__row">
+          <div class="field">
+            <label class="lbl" for="ip-sulfur">Точность по S <span class="hint">factor</span></label>
+            <input type="number" id="ip-sulfur" min="0" step="0.5" placeholder="10">
+          </div>
+          <div class="field">
+            <label class="lbl" for="ip-nitrogen">Точность по N <span class="hint">factor</span></label>
+            <input type="number" id="ip-nitrogen" min="0" step="0.5" placeholder="4">
+          </div>
+        </div>
+
+        <div class="sub">График</div>
+        <div class="field__row--3">
+          <div class="field">
+            <label class="lbl" for="ip-width">Ширина</label>
+            <input type="number" id="ip-width" min="1" step="1">
+          </div>
+          <div class="field">
+            <label class="lbl" for="ip-height">Высота</label>
+            <input type="number" id="ip-height" min="1" step="1">
+          </div>
+          <div class="field">
+            <label class="lbl" for="ip-dpi">DPI</label>
+            <input type="number" id="ip-dpi" min="10" max="1200" step="10">
+          </div>
+        </div>
+        <div class="field">
+          <label class="lbl" for="ip-format">Формат</label>
+          <select id="ip-format">
+            <option value="png">PNG</option>
+            <option value="svg">SVG</option>
+            <option value="pdf">PDF</option>
+            <option value="jpeg">JPEG</option>
+          </select>
+        </div>
+      </form>
+
+      <div class="ip-runs">
+        <div class="ip-runs__head">
+          <span class="eyebrow">История прогонов</span>
+          <span class="ip-status" id="ip-status"></span>
+        </div>
+        <div id="ip-runs-list"></div>
+      </div>
+    </div>
+
+    <div class="modal__foot">
+      <span class="modal__error hidden" id="ip-error"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button type="button" class="btn btn--ghost btn--sm" id="ip-use-job" title="Подставить в форму общие параметры задачи">Как у задачи</button>
+      <button type="button" class="btn btn--primary btn--sm" id="ip-reprocess">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Пересчитать спектр
+      </button>
     </div>
   </div>
 </div>

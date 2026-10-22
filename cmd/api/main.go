@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -110,6 +111,11 @@ func main() {
 		r.Get("/{job_id}/events", batchHandler.GetJobEvents)
 		r.Get("/{job_id}/results.zip", batchHandler.GetJobResultsZip)
 		r.Post("/{job_id}/cancel", batchHandler.CancelJob)
+
+		// Параметры и пересчёт отдельного спектра
+		r.Get("/{job_id}/items/{item_id}", batchHandler.GetItem)
+		r.Post("/{job_id}/items/{item_id}/reprocess", batchHandler.ReprocessItem)
+		r.Post("/{job_id}/items/{item_id}/runs/{run_id}/select", batchHandler.SelectRun)
 	})
 
 	// Базовый контекст запросов отменяется при остановке — открытые
@@ -129,7 +135,11 @@ func main() {
 	server.RegisterOnShutdown(stopBase)
 
 	go func() {
-		fmt.Printf("✅ HTTP server started on http://localhost%s\n", cfg.HTTPAddr)
+		addr := cfg.HTTPAddr
+		if strings.HasPrefix(addr, ":") {
+			addr = "localhost" + addr
+		}
+		fmt.Printf("✅ HTTP server started on http://%s\n", addr)
 		fmt.Println("Press Ctrl+C to stop...")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Server error: %v", err)

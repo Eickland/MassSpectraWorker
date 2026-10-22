@@ -299,8 +299,102 @@ type JobItem struct {
 	SpectrumCols *int       `db:"spectrum_cols" json:"spectrum_cols"`
 	SpectrumSize *int64     `db:"spectrum_size" json:"spectrum_size"`
 
+	// Индивидуальные параметры спектра; nil — используются параметры задачи
+	Params *JobParams `db:"params_json" json:"params,omitempty"`
+	// Прогон, результат которого сейчас выбран для спектра
+	CurrentRunID *uuid.UUID `db:"current_run_id" json:"current_run_id,omitempty"`
+
 	// Вычисляется в хендлере, в БД не хранится
 	ResultURL string `db:"-" json:"result_url,omitempty"`
+}
+
+// EffectiveParams - параметры, с которыми будет обработан спектр
+func (it *JobItem) EffectiveParams(jobParams JobParams) JobParams {
+	p := jobParams
+	if it.Params != nil {
+		p = *it.Params
+	}
+	p.ApplyDefaults()
+	return p
+}
+
+// IsBusy - спектр стоит в очереди или обрабатывается прямо сейчас
+func (it *JobItem) IsBusy() bool {
+	return it.Status == ItemPending || it.Status == ItemProcessing
+}
+
+// Статусы прогона
+const (
+	RunProcessing = "processing"
+	RunDone       = "done"
+	RunFailed     = "failed"
+)
+
+// ItemRun - одна обработка спектра с конкретными параметрами
+type ItemRun struct {
+	ID           uuid.UUID  `db:"id" json:"id"`
+	ItemID       uuid.UUID  `db:"item_id" json:"item_id"`
+	RunNo        int        `db:"run_no" json:"run_no"`
+	Params       JobParams  `db:"params_json" json:"params"`
+	Status       string     `db:"status" json:"status"`
+	ResultPath   *string    `db:"result_path" json:"-"`
+	SpectrumPath *string    `db:"spectrum_path" json:"-"`
+	SpectrumRows *int       `db:"spectrum_rows" json:"spectrum_rows,omitempty"`
+	SpectrumCols *int       `db:"spectrum_cols" json:"spectrum_cols,omitempty"`
+	SpectrumSize *int64     `db:"spectrum_size" json:"spectrum_size,omitempty"`
+	Error        *string    `db:"error" json:"error,omitempty"`
+	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
+	FinishedAt   *time.Time `db:"finished_at" json:"finished_at,omitempty"`
+
+	// Вычисляются в хендлере
+	ResultURL string `db:"-" json:"result_url,omitempty"`
+	Current   bool   `db:"-" json:"current"`
+}
+
+// MergeParams накладывает частичные параметры (JSON-объект, например
+// {"rel_error": 1, "brutto_dict": {"C": [4, 40]}}) на базовые.
+// Заданные ключи заменяются целиком, остальные берутся из base.
+func MergeParams(base JobParams, override json.RawMessage) (JobParams, error) {
+	trimmed := bytes.TrimSpace(override)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		base.ApplyDefaults()
+		return base, base.Validate()
+	}
+
+	var over map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &over); err != nil {
+		return JobParams{}, fmt.Errorf("params must be a JSON object: %w", err)
+	}
+	// Алиас из формы: "format" → "output_format"
+	if f, ok := over["format"]; ok {
+		if _, has := over["output_format"]; !has {
+			over["output_format"] = f
+		}
+		delete(over, "format")
+	}
+
+	baseJSON, err := json.Marshal(base)
+	if err != nil {
+		return JobParams{}, err
+	}
+	merged := map[string]json.RawMessage{}
+	if err := json.Unmarshal(baseJSON, &merged); err != nil {
+		return JobParams{}, err
+	}
+	for k, v := range over {
+		merged[k] = v
+	}
+	mergedJSON, err := json.Marshal(merged)
+	if err != nil {
+		return JobParams{}, err
+	}
+
+	var out JobParams
+	if err := json.Unmarshal(mergedJSON, &out); err != nil {
+		return JobParams{}, fmt.Errorf("invalid params: %w", err)
+	}
+	out.ApplyDefaults()
+	return out, out.Validate()
 }
 
 // JobProgress - прогресс задачи (для SSE)

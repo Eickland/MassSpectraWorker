@@ -76,3 +76,41 @@ func TestJobParamsValidation(t *testing.T) {
 		t.Fatalf("rel_error=3 ppm rejected: %v", err)
 	}
 }
+
+func TestMergeParams(t *testing.T) {
+	base := JobParams{RelError: 0.5, ChargeMax: 2, Protocol: "non_tmds",
+		BruttoDict: BruttoDict{"C": {4, 50}, "O": {0, 30}}, Options: map[string]string{"recalibrate": "false"}}
+	base.ApplyDefaults()
+
+	// Частичное изменение: остальное берётся из base
+	got, err := MergeParams(base, json.RawMessage(`{"rel_error": 1.2, "format": "svg"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RelError != 1.2 || got.ChargeMax != 2 || got.OutputFormat != "svg" ||
+		got.BruttoDict["O"] != (BruttoRange{0, 30}) || got.Options["recalibrate"] != "false" {
+		t.Fatalf("partial merge = %+v", got)
+	}
+
+	// Заданный словарь заменяется целиком, null — сбрасывает к умолчанию Python
+	got, _ = MergeParams(base, json.RawMessage(`{"brutto_dict": {"C": [1, 9]}}`))
+	if len(got.BruttoDict) != 1 || got.BruttoDict["C"] != (BruttoRange{1, 9}) {
+		t.Fatalf("brutto replace = %+v", got.BruttoDict)
+	}
+	got, _ = MergeParams(base, json.RawMessage(`{"brutto_dict": null}`))
+	if got.BruttoDict != nil {
+		t.Fatalf("brutto null = %+v", got.BruttoDict)
+	}
+
+	// Пустое переопределение = base
+	got, err = MergeParams(base, nil)
+	if err != nil || got.RelError != 0.5 {
+		t.Fatalf("empty override = %+v, %v", got, err)
+	}
+
+	for _, bad := range []string{`[1,2]`, `{"rel_error": "x"}`, `{"protocol": "nope"}`} {
+		if _, err := MergeParams(base, json.RawMessage(bad)); err == nil {
+			t.Errorf("expected error for %s", bad)
+		}
+	}
+}
