@@ -18,6 +18,7 @@ import logging
 import traceback
 
 logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 def df_to_proto(df: pd.DataFrame) -> pb2.MassSpectrumTable:
     cols = []

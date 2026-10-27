@@ -24,7 +24,7 @@ def plot_preview(ms_spectra,dpi=100,sizes=(8,50),width=10,height=8):
     
     visual.spectrum(ms_spectra,ax=axes[0])
     visual.vk(ms_spectra,sizes=sizes,ax=axes[1])
-    
+    axes[1].set_title(f"{len(ms_spectra[ms_spectra["assign"]==True])} formula")
     fig.suptitle(ms_spectra.attrs['name'])
     
     return fig

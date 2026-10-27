@@ -118,6 +118,7 @@ def _assign(ms_list, params: AssignParams, rel_error: Optional[float] = None):
         sulfur_precision_factor=params.sulfur_precision_factor,
         nitrogen_precision_factor=params.nitrogen_precision_factor,
         charge_max=params.charge_max,
+        formula_filter=None
     )
 
 
@@ -140,7 +141,7 @@ def process(ms_list, name: str, params: AssignParams):
     else:
         # 'custom' пока использует тот же пайплайн, что и non_tmds,
         # но целиком управляется параметрами из формы
-        spectra = _keep_organic(_assign(ms_list, params))
+        spectra = _assign(ms_list, params)
 
     spectra.attrs['name'] = name
     return spectra
