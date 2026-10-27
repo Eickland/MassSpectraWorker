@@ -252,8 +252,24 @@ function parseBruttoDict(text) {
    Collect JobParams (must match Go model.JobParams:
    rel_error in ppm, width/height/dpi/charge_max are ints)
    ============================================================ */
+function collectBatchOptions() {
+  const options = {};
+  for (const [id, key, label] of [
+    ['sulfur-factor', 'sulfur_precision_factor', 'Точность по S'],
+    ['nitrogen-factor', 'nitrogen_precision_factor', 'Точность по N'],
+  ]) {
+    const v = $(id).value.trim();
+    if (!v) continue;
+    const n = parseFloat(v);
+    if (Number.isNaN(n) || n < 0) throw new Error(`${label}: нужно неотрицательное число`);
+    options[key] = String(n);
+  }
+  return Object.keys(options).length ? options : undefined;
+}
+
 function collectParams() {
   return {
+    options: collectBatchOptions(),
     low_percentile: parseFloat($('low_percentile').value) || 99.5,
     high_percentile: parseFloat($('high_percentile').value) || 99.9,
     rel_error: parseFloat($('rel-error').value) || 0.5,
@@ -889,7 +905,10 @@ function paramsSummary(p) {
   if (p.brutto_dict) {
     parts.push(Object.entries(p.brutto_dict).map(([el, r]) => `${el}${r.min}-${r.max}`).join(' '));
   }
-  if (p.options && p.options.recalibrate === 'false') parts.push('без рекалибровки');
+  const opts = p.options || {};
+  if (opts.sulfur_precision_factor) parts.push(`S×${opts.sulfur_precision_factor}`);
+  if (opts.nitrogen_precision_factor) parts.push(`N×${opts.nitrogen_precision_factor}`);
+  if (opts.recalibrate === 'false') parts.push('без рекалибровки');
   return parts.join(' · ');
 }
 
