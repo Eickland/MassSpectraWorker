@@ -512,11 +512,24 @@ func (h *BatchHandler) GetJobResultsZip(w http.ResponseWriter, r *http.Request) 
 	// И defer-им на случай паники в середине — но тогда w уже частично записан,
 	// это неизбежно для streaming-подхода.
 
+	// itemID -> папка; usedFolders защищает от совпадений вроде
+	// Sample.mzML и Sample.csv, которые без расширения дают одно имя
+	itemFolders := make(map[uuid.UUID]string)
+	usedFolders := make(map[string]bool)
+
 	for _, f := range files {
 		// Папка на каждый спектр, чтобы png и спектр были рядом
-		folder := sanitizeZipName(f.SpectraName)
-		if folder == "" {
-			folder = f.ItemID.String()
+		folder, ok := itemFolders[f.ItemID]
+		if !ok {
+			folder = sanitizeZipName(trimSpectrumExt(f.SpectraName))
+			if folder == "" {
+				folder = f.ItemID.String()
+			}
+			for base, n := folder, 2; usedFolders[strings.ToLower(folder)]; n++ {
+				folder = fmt.Sprintf("%s_%d", base, n)
+			}
+			usedFolders[strings.ToLower(folder)] = true
+			itemFolders[f.ItemID] = folder
 		}
 
 		if err := addFileToZip(zw, f.PlotPath, folder); err != nil {
@@ -569,6 +582,16 @@ func addFileToZip(zw *zip.Writer, path, folder string) error {
 		return fmt.Errorf("copy %s: %w", path, err)
 	}
 	return nil
+}
+
+// trimSpectrumExt убирает расширение файла спектра (Sample.mzML -> Sample).
+// Режем только известные форматы, чтобы не обрезать имена вроде "Sample_0.5ppm".
+func trimSpectrumExt(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".mzml", ".mzxml", ".csv", ".txt", ".tsv", ".parquet", ".d", ".raw":
+		return strings.TrimSuffix(name, filepath.Ext(name))
+	}
+	return name
 }
 
 func sanitizeZipName(s string) string {
