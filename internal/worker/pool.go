@@ -7,8 +7,11 @@ import (
 	"MassSpectraWorker/internal/repository"
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"encoding/csv"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -481,13 +484,13 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 	if p.cfg.MsConvert == "" {
 		return fmt.Errorf("MSCONVERT_PATH is not set")
 	}
+	filters, err := p.msconvertFilters()
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(p.ctx, p.cfg.ConvertTimeout)
 	defer cancel()
 
-	// Конвертируем во временную папку и только потом переносим результат:
-	// прерванная конвертация не оставит недописанный .mzML в кэше,
-	// а имя выходного файла msconvert (по имени исходника) может не совпадать
-	// с именем элемента, заданным пользователем.
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
@@ -497,14 +500,16 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 	}
 	defer os.RemoveAll(outDir)
 
+	args := []string{src, "-o", outDir, "--mzML"}
+	args = append(args, filters...)
+	args = append(args, "--verbose")
+
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, p.cfg.MsConvert,
-		src, "-o", outDir,
-		"--mzML", "--filter", "zeroSamples removeExtra", "--verbose")
+	cmd := exec.CommandContext(ctx, p.cfg.MsConvert, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	log.Printf("msconvert: running %s %v", p.cfg.MsConvert, cmd.Args[1:])
+	log.Printf("msconvert: running %s %v", p.cfg.MsConvert, args)
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("msconvert exit: %w\nstdout:\n%s\nstderr:\n%s",
@@ -512,8 +517,7 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 	}
 
 	entries, _ := os.ReadDir(outDir)
-	var produced []string
-	var names []string
+	var produced, names []string
 	for _, e := range entries {
 		names = append(names, e.Name())
 		if !e.IsDir() && strings.EqualFold(filepath.Ext(e.Name()), ".mzml") {
@@ -525,6 +529,23 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 			"msconvert exit 0 but expected exactly one .mzML, files in %q: %v\nstdout:\n%s\nstderr:\n%s",
 			outDir, names, stdout.String(), stderr.String())
 	}
+
+	// Проверяем результат до переноса в кэш: msconvert может завершиться с кодом 0,
+	// но оставить профиль, если vendor-центроидирование для этого файла недоступно.
+	if !strings.EqualFold(strings.TrimSpace(p.cfg.PeakPicking), "none") {
+		centroid, profile, err := spectrumRepresentation(produced[0])
+		if err != nil {
+			return fmt.Errorf("check mzML: %w", err)
+		}
+		if !centroid {
+			return fmt.Errorf("peak picking requested, but %s has no centroid spectra (MS:1000127)\nstdout:\n%s\nstderr:\n%s",
+				filepath.Base(src), stdout.String(), stderr.String())
+		}
+		if profile {
+			log.Printf("msconvert: %s contains both centroid and profile markers — check the spectra", filepath.Base(src))
+		}
+	}
+
 	if err := os.Rename(produced[0], dst); err != nil {
 		return fmt.Errorf("move converted file: %w", err)
 	}
@@ -534,4 +555,74 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+func (p *WorkerPool) msconvertFilters() ([]string, error) {
+	switch mode := strings.ToLower(strings.TrimSpace(p.cfg.PeakPicking)); mode {
+	case "", "vendor":
+		// vendor-центроидирование должно быть первым фильтром
+		return []string{"--filter", "peakPicking vendor msLevel=1-"}, nil
+	case "cwt":
+		space, snr := p.cfg.CwtPeakSpace, p.cfg.CwtSNR
+		if space <= 0 {
+			space = 0.001 // по умолчанию в msconvert 0.1 — для FTICR склеит изобары
+		}
+		if snr <= 0 {
+			snr = 1
+		}
+		return []string{"--filter",
+			fmt.Sprintf("peakPicking cwt snr=%g peakSpace=%g msLevel=1-", snr, space)}, nil
+	case "none":
+		return []string{"--filter", "zeroSamples removeExtra"}, nil
+	default:
+		return nil, fmt.Errorf("unknown PeakPicking %q (vendor|cwt|none)", mode)
+	}
+}
+
+// ConversionTag меняется при смене параметров конвертации.
+// Добавьте его в ключ кэша (имя .mzML), чтобы старые профильные файлы не переиспользовались.
+func (p *WorkerPool) ConversionTag() string {
+	f, err := p.msconvertFilters()
+	if err != nil {
+		return "invalid"
+	}
+	sum := sha1.Sum([]byte(strings.Join(f, " ")))
+	return hex.EncodeToString(sum[:4])
+}
+
+// spectrumRepresentation ищет в mzML метки «centroid spectrum» (MS:1000127)
+// и «profile spectrum» (MS:1000128).
+func spectrumRepresentation(path string) (centroid, profile bool, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, false, err
+	}
+	defer f.Close()
+
+	cen, prof := []byte(`"MS:1000127"`), []byte(`"MS:1000128"`)
+	const overlap = 16 // чтобы не потерять метку на стыке кусков
+	buf := make([]byte, 1<<20)
+	var tail []byte
+	for {
+		n, rerr := f.Read(buf)
+		chunk := make([]byte, 0, len(tail)+n)
+		chunk = append(chunk, tail...)
+		chunk = append(chunk, buf[:n]...)
+		centroid = centroid || bytes.Contains(chunk, cen)
+		profile = profile || bytes.Contains(chunk, prof)
+		if centroid && profile {
+			return
+		}
+		start := len(chunk) - overlap
+		if start < 0 {
+			start = 0
+		}
+		tail = append([]byte(nil), chunk[start:]...)
+		if rerr == io.EOF {
+			return centroid, profile, nil
+		}
+		if rerr != nil {
+			return centroid, profile, rerr
+		}
+	}
 }

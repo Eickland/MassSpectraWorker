@@ -14,6 +14,9 @@ type Config struct {
 	WorkDir        string
 	MsConvert      string
 	ConvertTimeout time.Duration
+	PeakPicking    string
+	CwtPeakSpace   float64       // для cwt: мин. расстояние между пиками, m/z (по умолчанию 0.001)
+	CwtSNR         float64       // для cwt: мин. сигнал/шум (по умолчанию 1)
 	GRPCTimeout    time.Duration // таймаут одного вызова Python-сервиса
 	Workers        int
 	HTTPAddr       string

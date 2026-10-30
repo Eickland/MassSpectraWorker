@@ -118,7 +118,8 @@ def _assign(ms_list, params: AssignParams, rel_error: Optional[float] = None):
         sulfur_precision_factor=params.sulfur_precision_factor,
         nitrogen_precision_factor=params.nitrogen_precision_factor,
         charge_max=params.charge_max,
-        formula_filter=None
+        formula_filter=None,
+        isotope_filter = True
     )
 
 

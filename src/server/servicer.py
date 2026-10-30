@@ -76,7 +76,7 @@ class MassListServiceServicer(pb2_grpc.MassListServiceServicer):
                 percentile_kwargs['low_percentile'] = request.low_percentile
             if request.high_percentile > 0:
                 percentile_kwargs['high_percentile'] = request.high_percentile
-            ms_list = raw_data_process.extract_mass_list_percentile(request.spectra_path, **percentile_kwargs)
+            ms_list = raw_data_process.extract_mass_list(request.spectra_path, **percentile_kwargs)
             
             if ms_list is None or len(ms_list) == 0:
                 error_msg = f"No data extracted from {request.spectra_path} (empty mass list), params: {request.low_percentile}, {request.high_percentile}"
