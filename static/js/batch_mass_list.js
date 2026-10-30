@@ -9,6 +9,7 @@
                                                as named events)
      GET    /api/batch/{id}/results.zip    -> file download
      POST   /api/batch/{id}/cancel         -> { job_id, status, message }
+     GET    /api/msconvert, POST /api/msconvert/preview -> см. msconvert_form.js
    ============================================================ */
 
 'use strict';
@@ -268,7 +269,14 @@ function collectBatchOptions() {
 }
 
 function collectParams() {
+  let convert;
+  try {
+    convert = MsConvertForm.read('cv');
+  } catch (err) {
+    throw new Error('Конвертация: ' + err.message);
+  }
   return {
+    convert,
     options: collectBatchOptions(),
     low_percentile: parseFloat($('low_percentile').value) || 99.5,
     high_percentile: parseFloat($('high_percentile').value) || 99.9,
@@ -793,8 +801,13 @@ function buildHeaderSpectrum(el, count) {
 /* ============================================================
    Init
    ============================================================ */
+// Поля msconvert: в форме задачи и в окне пересчёта спектра
+MsConvertForm.mount($('cv-fields'), 'cv');
+MsConvertForm.mount($('ipcv-fields'), 'ipcv');
+
 document.addEventListener('DOMContentLoaded', () => {
   setTopStatus('ready');
+  MsConvertForm.loadInfo('cv', $('cv-warn'));
   buildHeaderSpectrum($('header-spectrum'), 64);
   buildSpectrum($('empty-spectrum'), 40, 90, 10);
   renderHistory();
@@ -946,6 +959,7 @@ function renderRuns(d) {
           <div class="run-card__meta">${escapeHtml(formatTime(r.finished_at || r.created_at))}${
             r.spectrum_rows ? ` · формул: ${r.spectrum_rows}` : ''}</div>
           <div class="run-card__params" title="${escapeHtml(paramsSummary(r.params))}">${escapeHtml(paramsSummary(r.params))}</div>
+          ${r.params && r.params.convert ? `<div class="run-card__params" title="${escapeHtml(MsConvertForm.summary(r.params.convert))}">${escapeHtml(MsConvertForm.summary(r.params.convert))}</div>` : ''}
           ${r.error ? `<div class="run-card__error" title="${escapeHtml(r.error)}">${escapeHtml(r.error)}</div>` : ''}
           <div class="run-card__actions">
             ${canSelect ? `<button type="button" class="btn btn--primary btn--sm" data-select-run="${r.id}">Сделать текущим</button>` : ''}
@@ -1013,6 +1027,7 @@ function fillItemForm(p) {
   $('ip-height').value = p.height ?? '';
   $('ip-dpi').value = p.dpi ?? '';
   $('ip-format').value = p.output_format || 'png';
+  MsConvertForm.fill('ipcv', p.convert);
   setIpError('');
 }
 
@@ -1033,7 +1048,15 @@ function collectItemParams() {
   if (sulfur) options.sulfur_precision_factor = sulfur; else delete options.sulfur_precision_factor;
   if (nitrogen) options.nitrogen_precision_factor = nitrogen; else delete options.nitrogen_precision_factor;
 
+  let convert;
+  try {
+    convert = MsConvertForm.read('ipcv');
+  } catch (err) {
+    throw new Error('Конвертация: ' + err.message);
+  }
+
   return {
+    convert,
     low_percentile: numOrUndefined('ip-low') ?? 0,
     high_percentile: numOrUndefined('ip-high') ?? 0,
     protocol: $('ip-protocol').value,

@@ -16,6 +16,7 @@ import (
 	grpcclient "MassSpectraWorker/internal/client"
 	"MassSpectraWorker/internal/config"
 	"MassSpectraWorker/internal/handlers"
+	"MassSpectraWorker/internal/model"
 	"MassSpectraWorker/internal/repository"
 	"MassSpectraWorker/internal/service"
 	"MassSpectraWorker/internal/storage"
@@ -31,6 +32,11 @@ func main() {
 		log.Println("No .env file found, using environment variables")
 	}
 	cfg := config.LoadConfig()
+	if err := model.SetDefaultConvert(model.ConvertParams{
+		PeakPicking: cfg.PeakPicking, CwtSNR: cfg.CwtSNR, CwtPeakSpace: cfg.CwtPeakSpace,
+	}); err != nil {
+		log.Fatalf("❌ Invalid msconvert defaults (PEAK_PICKING, CWT_SNR, CWT_PEAK_SPACE): %v", err)
+	}
 
 	// 1. База SQLite (файл создаётся и мигрируется автоматически)
 	db, err := storage.Open(cfg.DBPath)
@@ -90,6 +96,11 @@ func main() {
 	})
 	browseHandler := handlers.NewBrowseHandler()
 	r.Get("/api/browse", browseHandler.Browse)
+
+	// Параметры msconvert для формы: умолчания и предпросмотр команды
+	msconvertHandler := handlers.NewMsConvertHandler(cfg)
+	r.Get("/api/msconvert", msconvertHandler.Info)
+	r.Post("/api/msconvert/preview", msconvertHandler.Preview)
 
 	// Web страницы
 	r.Get("/index", webHandler.IndexPage)

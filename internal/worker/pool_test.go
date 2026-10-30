@@ -92,6 +92,12 @@ type env struct {
 
 func setup(t *testing.T, delay time.Duration) *env {
 	t.Helper()
+	return setupWith(t, delay, nil)
+}
+
+// setupWith - как setup, но позволяет поправить конфигурацию пула (например, MsConvert)
+func setupWith(t *testing.T, delay time.Duration, tweak func(*config.Config)) *env {
+	t.Helper()
 	dir := t.TempDir()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -122,6 +128,9 @@ func setup(t *testing.T, delay time.Duration) *env {
 		ConvertTimeout: time.Minute,
 		GRPCTimeout:    10 * time.Second,
 		Workers:        2,
+	}
+	if tweak != nil {
+		tweak(&cfg)
 	}
 	repo := repository.NewJobRepository(db)
 	pool := worker.NewWorkerPool(repo, cl, cfg.Workers, cfg)

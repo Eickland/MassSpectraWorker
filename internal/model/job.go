@@ -172,6 +172,9 @@ type JobParams struct {
 	// tmds_rel_error, tmds_max_num, tmds_brutto_dict
 	Options map[string]string `json:"options,omitempty"`
 
+	// Конвертация .d/.raw/.mzXML → .mzML (msconvert). Для входных .mzML не используется.
+	Convert ConvertParams `json:"convert"`
+
 	// Параметры графика
 	Dpi          int32  `json:"dpi"`
 	Width        int32  `json:"width"`
@@ -221,6 +224,7 @@ func (p *JobParams) ApplyDefaults() {
 	if p.OutputFormat == "jpg" {
 		p.OutputFormat = "jpeg"
 	}
+	p.Convert.ApplyDefaults()
 }
 
 func (p JobParams) Validate() error {
@@ -254,7 +258,7 @@ func (p JobParams) Validate() error {
 	if !KnownFormats[p.OutputFormat] {
 		return fmt.Errorf("unknown output format %q", p.OutputFormat)
 	}
-	return nil
+	return p.Convert.Validate()
 }
 
 // Value - сериализация в TEXT-колонку params_json
