@@ -29,9 +29,13 @@ func LoadConfig() Config {
 		WorkDir:        absPath(getEnv("WORK_DIR", "./work")),
 		MsConvert:      os.Getenv("MSCONVERT_PATH"),
 		ConvertTimeout: getDuration("CONVERT_TIMEOUT", 30*time.Minute),
-		GRPCTimeout:    getDuration("GRPC_TIMEOUT", 200*time.Second),
-		Workers:        getInt("WORKERS", 5),
-		HTTPAddr:       getEnv("HTTP_ADDR", ":8080"),
+		// Умолчания для формы «Конвертация (msconvert)»; в каждой задаче их можно изменить
+		PeakPicking:  os.Getenv("PEAK_PICKING"), // vendor | cwt | none
+		CwtSNR:       getFloat("CWT_SNR", 0),
+		CwtPeakSpace: getFloat("CWT_PEAK_SPACE", 0),
+		GRPCTimeout:  getDuration("GRPC_TIMEOUT", 200*time.Second),
+		Workers:      getInt("WORKERS", 5),
+		HTTPAddr:     getEnv("HTTP_ADDR", ":8080"),
 	}
 }
 
@@ -62,6 +66,15 @@ func getDuration(key string, def time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
+		}
+	}
+	return def
+}
+
+func getFloat(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			return f
 		}
 	}
 	return def

@@ -7,9 +7,7 @@ import (
 	"MassSpectraWorker/internal/repository"
 	"bytes"
 	"context"
-	"crypto/sha1"
 	"encoding/csv"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -264,14 +262,19 @@ func (p *WorkerPool) processItem(item *model.JobItem, run *model.ItemRun) error 
 	kind := detectInputKind(item.SpectraPath)
 	log.Printf("Processing item %s (%s) run #%d, kind=%s", item.ID, item.SpectraName, run.RunNo, kind)
 
+	params := run.Params
+	params.ApplyDefaults()
+
 	var mzmlPath string
 	switch kind {
 	case "mzml":
-		mzmlPath = item.SpectraPath
+		mzmlPath = item.SpectraPath // готовый .mzML: параметры конвертации не применяются
 	case "d", "raw", "mzxml":
-		mzmlPath = p.mzmlCachePath(item.JobID, item.SpectraName)
+		// Кэш зависит от параметров конвертации: при других фильтрах файл
+		// конвертируется заново, а прежний остаётся для старых прогонов
+		mzmlPath = p.mzmlCachePath(item.JobID, item.SpectraName, params.Convert)
 		if !fileExists(mzmlPath) {
-			if err := p.convertToMzML(item.SpectraPath, mzmlPath); err != nil {
+			if err := p.convertToMzML(item.SpectraPath, mzmlPath, params.Convert); err != nil {
 				return fmt.Errorf("convert %s → .mzML: %w", kind, err)
 			}
 		}
@@ -280,9 +283,6 @@ func (p *WorkerPool) processItem(item *model.JobItem, run *model.ItemRun) error 
 	default:
 		return fmt.Errorf("unsupported input: %s", item.SpectraPath)
 	}
-
-	params := run.Params
-	params.ApplyDefaults()
 
 	req := &pb.MassListRequest{
 		SpectraPath:    mzmlPath,
@@ -377,8 +377,9 @@ func (p *WorkerPool) spectrumPath(jobID uuid.UUID, spectraName string, runNo int
 	return filepath.Join(p.cfg.ResultsDir, jobID.String(), runBase(spectraName, runNo)+"_spectrum.csv")
 }
 
-func (p *WorkerPool) mzmlCachePath(jobID uuid.UUID, spectraName string) string {
-	return filepath.Join(p.cfg.WorkDir, jobID.String(), baseName(spectraName)+".mzML")
+// mzmlCachePath - кэш сконвертированного файла; тег отличает наборы фильтров msconvert
+func (p *WorkerPool) mzmlCachePath(jobID uuid.UUID, spectraName string, conv model.ConvertParams) string {
+	return filepath.Join(p.cfg.WorkDir, jobID.String(), baseName(spectraName)+"."+conv.Tag()+".mzML")
 }
 
 func saveSpectrumCSV(path string, t *pb.MassSpectrumTable) (err error) {
@@ -480,12 +481,11 @@ func detectInputKind(path string) string {
 	return "unknown"
 }
 
-func (p *WorkerPool) convertToMzML(src, dst string) error {
+func (p *WorkerPool) convertToMzML(src, dst string, conv model.ConvertParams) error {
 	if p.cfg.MsConvert == "" {
 		return fmt.Errorf("MSCONVERT_PATH is not set")
 	}
-	filters, err := p.msconvertFilters()
-	if err != nil {
+	if err := conv.Validate(); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(p.ctx, p.cfg.ConvertTimeout)
@@ -500,9 +500,7 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 	}
 	defer os.RemoveAll(outDir)
 
-	args := []string{src, "-o", outDir, "--mzML"}
-	args = append(args, filters...)
-	args = append(args, "--verbose")
+	args := append([]string{src, "-o", outDir}, conv.Args()...)
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, p.cfg.MsConvert, args...)
@@ -532,7 +530,7 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 
 	// Проверяем результат до переноса в кэш: msconvert может завершиться с кодом 0,
 	// но оставить профиль, если vendor-центроидирование для этого файла недоступно.
-	if !strings.EqualFold(strings.TrimSpace(p.cfg.PeakPicking), "none") {
+	if conv.Centroided() {
 		centroid, profile, err := spectrumRepresentation(produced[0])
 		if err != nil {
 			return fmt.Errorf("check mzML: %w", err)
@@ -555,39 +553,6 @@ func (p *WorkerPool) convertToMzML(src, dst string) error {
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
-}
-
-func (p *WorkerPool) msconvertFilters() ([]string, error) {
-	switch mode := strings.ToLower(strings.TrimSpace(p.cfg.PeakPicking)); mode {
-	case "", "vendor":
-		// vendor-центроидирование должно быть первым фильтром
-		return []string{"--filter", "peakPicking vendor msLevel=1-"}, nil
-	case "cwt":
-		space, snr := p.cfg.CwtPeakSpace, p.cfg.CwtSNR
-		if space <= 0 {
-			space = 0.001 // по умолчанию в msconvert 0.1 — для FTICR склеит изобары
-		}
-		if snr <= 0 {
-			snr = 1
-		}
-		return []string{"--filter",
-			fmt.Sprintf("peakPicking cwt snr=%g peakSpace=%g msLevel=1-", snr, space)}, nil
-	case "none":
-		return []string{"--filter", "zeroSamples removeExtra"}, nil
-	default:
-		return nil, fmt.Errorf("unknown PeakPicking %q (vendor|cwt|none)", mode)
-	}
-}
-
-// ConversionTag меняется при смене параметров конвертации.
-// Добавьте его в ключ кэша (имя .mzML), чтобы старые профильные файлы не переиспользовались.
-func (p *WorkerPool) ConversionTag() string {
-	f, err := p.msconvertFilters()
-	if err != nil {
-		return "invalid"
-	}
-	sum := sha1.Sum([]byte(strings.Join(f, " ")))
-	return hex.EncodeToString(sum[:4])
 }
 
 // spectrumRepresentation ищет в mzML метки «centroid spectrum» (MS:1000127)
