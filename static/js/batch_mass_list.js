@@ -254,7 +254,7 @@ function parseBruttoDict(text) {
    rel_error in ppm, width/height/dpi/charge_max are ints)
    ============================================================ */
 function collectBatchOptions() {
-  const options = {};
+  const options = { recalibrate: $('recalibrate').checked ? 'true' : 'false' };
   for (const [id, key, label] of [
     ['sulfur-factor', 'sulfur_precision_factor', 'Точность по S'],
     ['nitrogen-factor', 'nitrogen_precision_factor', 'Точность по N'],
@@ -265,7 +265,7 @@ function collectBatchOptions() {
     if (Number.isNaN(n) || n < 0) throw new Error(`${label}: нужно неотрицательное число`);
     options[key] = String(n);
   }
-  return Object.keys(options).length ? options : undefined;
+  return options;
 }
 
 function collectParams() {

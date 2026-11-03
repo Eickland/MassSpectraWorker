@@ -452,9 +452,14 @@ Sample_002 = ./data/spectra_batch/Sample_002.csv</textarea>
               </select>
             </div>
 
-            <div class="field">
-              <label class="lbl" for="charge-max">Макс. заряд <span class="hint">int</span></label>
-              <input type="number" id="charge-max" value="1" min="1" max="10" step="1">
+            <div class="field__row">
+              <div class="field">
+                <label class="lbl" for="charge-max">Макс. заряд <span class="hint">int</span></label>
+                <input type="number" id="charge-max" value="1" min="1" max="10" step="1">
+              </div>
+              <div class="field" style="display:flex; align-items:flex-end; padding-bottom: 11px;">
+                <label class="ip-check"><input type="checkbox" id="recalibrate" checked> Рекалибровка</label>
+              </div>
             </div>
 
             <div class="field__row">
