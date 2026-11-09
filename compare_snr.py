@@ -36,6 +36,9 @@ F64 = "MS:1000523"
 F32 = "MS:1000521"
 ZLIB = "MS:1000574"
 NUMPRESS = ("MS:1002312", "MS:1002313", "MS:1002314")
+CENTROID = "MS:1000127"
+PROFILE = "MS:1000128"
+PEAK_PICKING = "MS:1000035"
 
 
 def local(tag):
@@ -61,11 +64,17 @@ def read_spectra(path, ms_level=1):
     for _, el in ET.iterparse(path, events=("end",)):
         if local(el.tag) != "spectrum":
             continue
-        level = None
-        for cv in el.iter():
-            if local(cv.tag) == "cvParam" and cv.get("accession") == MS_LEVEL:
+        level, rep = None, "?"
+        for cv in el:
+            if local(cv.tag) != "cvParam":
+                continue
+            acc = cv.get("accession")
+            if acc == MS_LEVEL:
                 level = int(cv.get("value"))
-                break
+            elif acc == CENTROID:
+                rep = "centroid"
+            elif acc == PROFILE:
+                rep = "profile"
         if level == ms_level:
             mz = it = None
             for bda in el.iter():
@@ -79,9 +88,24 @@ def read_spectra(path, ms_level=1):
                 elif INT_ARRAY in params:
                     it = data
             if mz is not None and it is not None:
-                out.append((mz, it))
+                out.append((mz, it, rep))
         el.clear()
     return out
+
+
+def header_info(path):
+    """Есть ли в dataProcessing шаг peak picking и какие методы записаны."""
+    head = []
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if "<run" in line:
+                break
+            head.append(line)
+    text = "".join(head)
+    picked = PEAK_PICKING in text
+    methods = sorted({l.split('name="', 1)[1].split('"', 1)[0]
+                      for l in head if "<userParam" in l and 'name="' in l})
+    return picked, methods
 
 
 def run_msconvert(exe, src, out_dir, snr, space, levels, mz):
@@ -100,7 +124,8 @@ def run_msconvert(exe, src, out_dir, snr, space, levels, mz):
     files = [f for f in os.listdir(out_dir) if f.lower().endswith(".mzml")]
     if not files:
         sys.exit(f"msconvert не создал .mzML в {out_dir}")
-    return os.path.join(out_dir, files[0]), time.time() - t0
+    log = (res.stdout + res.stderr).strip().splitlines()
+    return os.path.join(out_dir, files[0]), time.time() - t0, log
 
 
 def matched_fraction(ref_mz, mz, ppm):
@@ -138,13 +163,23 @@ def main():
     for snr in snrs:
         out_dir = os.path.join(base_dir, f"snr_{snr:g}")
         print(f"→ snr={snr:g} …", flush=True)
-        mzml, secs = run_msconvert(a.msconvert, src, out_dir, snr, a.space, a.levels, a.mz)
+        mzml, secs, log = run_msconvert(a.msconvert, src, out_dir, snr, a.space, a.levels, a.mz)
         spectra = read_spectra(mzml)
         if not spectra:
             sys.exit(f"В {mzml} нет MS1-спектров")
-        counts = [len(m) for m, _ in spectra]
+        counts = [len(s[0]) for s in spectra]
         # Основной спектр — с наибольшим числом пиков (для FTICR обычно он единственный)
-        mz, it = max(spectra, key=lambda s: len(s[0]))
+        mz, it, rep = max(spectra, key=lambda s: len(s[0]))
+        picked, methods = header_info(mzml)
+        steps = sorted(mz[i + 1] - mz[i] for i in range(len(mz) - 1))
+        dmz = steps[len(steps) // 2] if steps else 0.0
+        if snr == snrs[0]:
+            print(f"   тип спектра: {rep}; peak picking в dataProcessing: {'да' if picked else 'НЕТ'}")
+            if methods:
+                print("   методы обработки: " + "; ".join(methods))
+            print(f"   медианный шаг m/z между соседними точками: {dmz:.6g}")
+            for line in log[-6:]:
+                print("   msconvert: " + line)
         ints = sorted(it)
         if ref is None:
             ref = list(mz)
@@ -158,6 +193,9 @@ def main():
             "min_intensity": f"{ints[0]:.3g}" if ints else "",
             "median_intensity": f"{statistics.median(ints):.3g}" if ints else "",
             "mz_range": f"{min(mz):.2f}–{max(mz):.2f}" if len(mz) else "",
+            "spectrum_type": rep,
+            "peak_picking_logged": "yes" if picked else "no",
+            "median_step_mz": f"{dmz:.6g}",
             "convert_s": round(secs, 1),
         })
 
@@ -176,6 +214,12 @@ def main():
     print()
     for row in table:
         print("  ".join(c.rjust(w) for c, w in zip(row, widths)))
+    if len({r["peaks_main_scan"] for r in rows}) == 1 and len(rows) > 1:
+        print("\n⚠ Число пиков не зависит от snr — фильтр CWT, по-видимому, не сработал.")
+        if rows[0]["spectrum_type"] == "centroid" and rows[0]["peak_picking_logged"] == "no":
+            print("  Спектры уже помечены как центроидные: CWT их пропускает. Нужен профильный спектр прибора.")
+        elif rows[0]["spectrum_type"] == "profile":
+            print("  В выходном файле профильный спектр: центроидирование не выполнено. См. вывод msconvert выше.")
     print(f"\nСканов MS1: {rows[0]['scans']}. Таблица сохранена: {csv_path}")
     print(f"«совпало %» — доля пиков, найденных и при наименьшем snr (±{a.ppm:g} ppm):"
           " ~100% значит, что рост S/N только отбрасывает слабые пики, а не сдвигает центроиды.")
